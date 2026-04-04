@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { projects, clients, tasks } from '@/data/mock';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Plus, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { ProjectStatus } from '@/types';
+import { ProjectFormModal } from '@/components/FormModals';
 import { cn } from '@/lib/utils';
 import type { ProjectStatus } from '@/types';
 
