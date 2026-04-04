@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { clients, projects } from '@/data/mock';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, Mail, Phone, Building } from 'lucide-react';
+import { Search, Mail, Phone, Building } from 'lucide-react';
+import { ClientFormModal } from '@/components/FormModals';
 
 export default function Clients() {
   const [search, setSearch] = useState('');
@@ -16,7 +16,7 @@ export default function Clients() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-foreground">Clients</h1>
-        <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Add Client</Button>
+        <ClientFormModal />
       </div>
 
       <div className="relative max-w-sm">

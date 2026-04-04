@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { tasks, projects, users } from '@/data/mock';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Plus, CheckCircle2, Circle, Clock } from 'lucide-react';
+import { CheckCircle2, Circle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TaskStatus } from '@/types';
+import { TaskFormModal } from '@/components/FormModals';
 
 const statusConfig: Record<TaskStatus, { icon: React.ElementType; label: string; style: string }> = {
   todo: { icon: Circle, label: 'To Do', style: 'text-muted-foreground' },
@@ -20,7 +19,7 @@ export default function Tasks() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-foreground">Tasks</h1>
-        <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Add Task</Button>
+        <TaskFormModal />
       </div>
 
       <div className="flex gap-2">

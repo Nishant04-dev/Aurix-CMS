@@ -2,12 +2,11 @@ import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { projects, clients, tasks } from '@/data/mock';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Plus, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ProjectStatus } from '@/types';
+import { ProjectFormModal } from '@/components/FormModals';
 
 const statusStyles: Record<ProjectStatus, string> = {
   pending: 'bg-muted text-muted-foreground',
@@ -37,7 +36,7 @@ export default function Projects() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-foreground">Projects</h1>
-        {!isClient && <Button size="sm"><Plus className="h-4 w-4 mr-1" /> New Project</Button>}
+        {!isClient && <ProjectFormModal />}
       </div>
 
       <div className="relative max-w-sm">

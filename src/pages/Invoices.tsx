@@ -2,9 +2,10 @@ import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { invoices, clients, projects } from '@/data/mock';
 import { Button } from '@/components/ui/button';
-import { Plus, Download } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { InvoiceStatus } from '@/types';
+import { InvoiceFormModal } from '@/components/FormModals';
 
 const statusStyles: Record<InvoiceStatus, string> = {
   paid: 'bg-success/10 text-success',
@@ -22,7 +23,7 @@ export default function Invoices() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-foreground">Invoices</h1>
-        {!isClient && <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Create Invoice</Button>}
+        {!isClient && <InvoiceFormModal />}
       </div>
 
       <div className="border border-border rounded-lg overflow-hidden">

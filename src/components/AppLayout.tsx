@@ -3,10 +3,11 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   LayoutDashboard, Users, FolderKanban, CheckSquare, MessageSquare,
-  FileText, CreditCard, UserCog, Bell, LogOut, ChevronLeft, Menu
+  FileText, CreditCard, UserCog, LogOut, ChevronLeft, Menu
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { users } from '@/data/mock';
+import NotificationsPanel from '@/components/NotificationsPanel';
 
 const adminNav = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
@@ -113,10 +114,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {nav.find(n => n.path === '/' ? location.pathname === '/' : location.pathname.startsWith(n.path))?.label || 'Aurix'}
           </div>
           <div className="flex items-center gap-3">
-            <button className="relative p-1 text-muted-foreground hover:text-foreground">
-              <Bell className="h-5 w-5" />
-              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary" />
-            </button>
+            <NotificationsPanel />
             <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
               {user.name.split(' ').map(n => n[0]).join('')}
             </div>
