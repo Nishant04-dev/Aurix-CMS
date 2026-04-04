@@ -20,7 +20,7 @@ export default function Tasks() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-foreground">Tasks</h1>
-        <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Add Task</Button>
+        <TaskFormModal />
       </div>
 
       <div className="flex gap-2">

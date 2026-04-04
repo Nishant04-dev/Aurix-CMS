@@ -38,7 +38,7 @@ export default function Projects() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-foreground">Projects</h1>
-        {!isClient && <Button size="sm"><Plus className="h-4 w-4 mr-1" /> New Project</Button>}
+        {!isClient && <ProjectFormModal />}
       </div>
 
       <div className="relative max-w-sm">

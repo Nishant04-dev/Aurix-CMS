@@ -23,7 +23,7 @@ export default function Invoices() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-foreground">Invoices</h1>
-        {!isClient && <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Create Invoice</Button>}
+        {!isClient && <InvoiceFormModal />}
       </div>
 
       <div className="border border-border rounded-lg overflow-hidden">
