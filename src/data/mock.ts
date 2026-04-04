@@ -34,7 +34,7 @@ export const messages: Message[] = [
   { id: 'm1', senderId: 'u1', recipientId: 'u4', projectId: 'p1', content: 'Hi Michael, the homepage design is ready for your review. Let me know your thoughts.', createdAt: '2024-04-10T10:30:00' },
   { id: 'm2', senderId: 'u4', recipientId: 'u1', projectId: 'p1', content: 'Looks great! Can we tweak the color scheme slightly? I will send some references.', createdAt: '2024-04-10T11:15:00' },
   { id: 'm3', senderId: 'u1', recipientId: 'u5', projectId: 'p2', content: 'Lisa, the app prototype is ready. When would you like to schedule a walkthrough?', createdAt: '2024-04-11T09:00:00' },
-  { id: 'm4', senderId: 'u5', recipientId: 'u1', projectId: 'p2', content: 'How about Thursday at 2pm? I'll have my team join as well.', createdAt: '2024-04-11T09:45:00' },
+  { id: 'm4', senderId: 'u5', recipientId: 'u1', projectId: 'p2', content: 'How about Thursday at 2pm? I will have my team join as well.', createdAt: '2024-04-11T09:45:00' },
 ];
 
 export const invoices: Invoice[] = [
