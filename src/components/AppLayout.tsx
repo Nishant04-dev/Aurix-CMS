@@ -3,7 +3,11 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   LayoutDashboard, Users, FolderKanban, CheckSquare, MessageSquare,
-  FileText, CreditCard, UserCog, Bell, LogOut, ChevronLeft, Menu
+  FileText, CreditCard, UserCog, LogOut, ChevronLeft, Menu
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { users } from '@/data/mock';
+import NotificationsPanel from '@/components/NotificationsPanel';
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { users } from '@/data/mock';
