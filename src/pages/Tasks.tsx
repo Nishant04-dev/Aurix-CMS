@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { tasks, projects, users } from '@/data/mock';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Plus, CheckCircle2, Circle, Clock } from 'lucide-react';
+import { CheckCircle2, Circle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { TaskStatus } from '@/types';
+import { TaskFormModal } from '@/components/FormModals';
 import type { TaskStatus } from '@/types';
 
 const statusConfig: Record<TaskStatus, { icon: React.ElementType; label: string; style: string }> = {
