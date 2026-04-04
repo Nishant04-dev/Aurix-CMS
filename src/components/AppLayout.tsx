@@ -8,9 +8,6 @@ import {
 import { cn } from '@/lib/utils';
 import { users } from '@/data/mock';
 import NotificationsPanel from '@/components/NotificationsPanel';
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { users } from '@/data/mock';
 
 const adminNav = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
