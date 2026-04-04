@@ -9,16 +9,17 @@ import { cn } from '@/lib/utils';
 export default function Messages() {
   const { user } = useAuth();
   const [input, setInput] = useState('');
+  const [selectedPartner, setSelectedPartner] = useState('');
 
   if (!user) return null;
 
   // Group conversations
   const userMessages = allMessages.filter(m => m.senderId === user.id || m.recipientId === user.id);
   const conversationPartners = [...new Set(userMessages.map(m => m.senderId === user.id ? m.recipientId : m.senderId))];
+  const activePartner = selectedPartner || conversationPartners[0] || '';
 
-  const [selectedPartner, setSelectedPartner] = useState(conversationPartners[0] || '');
   const conversation = userMessages
-    .filter(m => m.senderId === selectedPartner || m.recipientId === selectedPartner)
+    .filter(m => m.senderId === activePartner || m.recipientId === activePartner)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   return (
