@@ -38,7 +38,7 @@ export default function Messages() {
                 onClick={() => setSelectedPartner(partnerId)}
                 className={cn(
                   'w-full text-left px-4 py-3 border-b border-border transition-colors',
-                  selectedPartner === partnerId ? 'bg-muted' : 'hover:bg-muted/50'
+                  activePartner === partnerId ? 'bg-muted' : 'hover:bg-muted/50'
                 )}
               >
                 <p className="text-sm font-medium text-foreground">{partner?.name}</p>
