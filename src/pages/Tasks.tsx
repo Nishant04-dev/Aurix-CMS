@@ -4,7 +4,6 @@ import { CheckCircle2, Circle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TaskStatus } from '@/types';
 import { TaskFormModal } from '@/components/FormModals';
-import type { TaskStatus } from '@/types';
 
 const statusConfig: Record<TaskStatus, { icon: React.ElementType; label: string; style: string }> = {
   todo: { icon: Circle, label: 'To Do', style: 'text-muted-foreground' },

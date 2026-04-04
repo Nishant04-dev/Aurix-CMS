@@ -7,8 +7,6 @@ import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ProjectStatus } from '@/types';
 import { ProjectFormModal } from '@/components/FormModals';
-import { cn } from '@/lib/utils';
-import type { ProjectStatus } from '@/types';
 
 const statusStyles: Record<ProjectStatus, string> = {
   pending: 'bg-muted text-muted-foreground',
