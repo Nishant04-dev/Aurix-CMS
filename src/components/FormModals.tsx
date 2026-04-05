@@ -565,6 +565,7 @@ export function TaskFormModal({ onSuccess, initialData, trigger }: { onSuccess?:
 export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSuccess?: () => void, initialData?: any, trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const { data: clientsData, isLoading: clientsLoading } = useClients();
+  const { orgId } = useAuth();
   const [form, setForm] = useState({
     clientId: initialData?.client_id || initialData?.clientId || '',
     amount: initialData?.amount?.toString() || '',
@@ -583,13 +584,14 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
     try {
       const dbData = {
         client_id: form.clientId,
+        org_id: orgId,
         amount: Number(form.amount),
         due_date: form.dueDate,
         status: form.status
       };
 
       if (initialData) {
-        const { error: invoiceError } = await supabase.from('invoices').update(dbData).eq('id', initialData.id);
+        const { error: invoiceError } = await (supabase as any).from('invoices').update(dbData).eq('id', initialData.id);
         if (invoiceError) throw invoiceError;
 
         // Update or insert first item if it exists
@@ -604,7 +606,7 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
         
         toast({ title: 'Invoice Updated', description: 'Changes saved successfully.' });
       } else {
-        const { data: invoice, error: invoiceError } = await supabase.from('invoices').insert(dbData).select().single();
+        const { data: invoice, error: invoiceError } = await (supabase as any).from('invoices').insert(dbData).select().single();
         if (invoiceError) throw invoiceError;
 
         const { error: itemError } = await supabase.from('invoice_items').insert({
