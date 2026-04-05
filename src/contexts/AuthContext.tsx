@@ -46,7 +46,27 @@ async function fetchProfile(sessionUser: any) {
       return null;
     }
 
-    const resolvedOrgId: string | null = (p as any)?.org_id || null;
+    let resolvedOrgId: string | null = (p as any)?.org_id || null;
+
+    // Auto-initialize: if org_id is null but user owns orgs, set to first owned org
+    if (!resolvedOrgId) {
+      try {
+        const { data: ownedOrg } = await (supabase as any)
+          .from('organizations')
+          .select('id')
+          .eq('owner_id', sessionUser.id)
+          .limit(1)
+          .maybeSingle();
+        if (ownedOrg?.id) {
+          resolvedOrgId = ownedOrg.id;
+          // Persist so next load is instant
+          await (supabase as any)
+            .from('profiles')
+            .update({ org_id: ownedOrg.id, role: 'super_admin', account_type: 'business', power_level: 100 })
+            .eq('id', sessionUser.id);
+        }
+      } catch { /* ignore */ }
+    }
     const rawType = (p as any)?.account_type;
     const accountType: 'user' | 'business' =
       rawType === 'business' || rawType === 'user'
