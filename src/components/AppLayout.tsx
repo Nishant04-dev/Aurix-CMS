@@ -43,10 +43,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!user) return null;
 
+  const isOwner  = user?.role === 'admin' || user?.role === 'super_admin';
+  const isClient = user?.role === 'client';
+
   // Filter nav items by permission + platform owner + plan
   const nav = NAV_ITEMS.filter(item => {
     if (item.superAdminOnly && !isPlatformOwner) return false;
     if ((item as any).adminOnly && !['admin','super_admin'].includes(user?.role ?? '')) return false;
+    // Billing: only org owners (admin/super_admin) with business account
+    if (item.path === '/settings/billing' && (!isOwner || accountType !== 'business')) return false;
+    // Clients, Team, Roles, Audit Logs, Invitations (send): hidden from client role
+    if (isClient && ['/clients', '/team', '/roles', '/org/audit-logs'].includes(item.path)) return false;
     if (item.planFeature && !planCan(item.planFeature)) return false;
     if (!item.perm) return true;
     return can(item.perm);
@@ -145,8 +152,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           )}
-          {/* Upgrade CTA — only for free/pro plans, not enterprise */}
-          {!collapsed && planName !== 'Enterprise' && (
+          {/* Upgrade CTA — only for business owners on free/pro plans */}
+          {!collapsed && accountType === 'business' && isOwner && planName !== 'Enterprise' && (
             <Link
               to="/settings/billing"
               className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors"

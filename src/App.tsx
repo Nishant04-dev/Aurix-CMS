@@ -103,7 +103,7 @@ function AppRoutes() {
         <Route path="/support" element={<Support />} />
         <Route path="/org/audit-logs" element={<RequireAdmin><AuditLogs /></RequireAdmin>} />
         <Route path="/org/chat" element={<Chat />} />
-        <Route path="/settings/billing" element={<Billing />} />
+        <Route path="/settings/billing" element={(isAdmin || isPlatformOwner) ? <Billing /> : <Navigate to="/" replace />} />
 
         {/* Platform routes — wrapped in PlatformLayout */}
         <Route path="/platform" element={isPlatformOwner ? <Navigate to="/platform/overview" replace /> : <Navigate to="/" replace />} />
