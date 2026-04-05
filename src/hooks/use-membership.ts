@@ -80,6 +80,14 @@ async function leaveOrgDirect() {
     nextRole = otherInvites?.[0]?.role_name ?? 'client';
   }
 
+  // Mark the invitation for the left org as 'left' so it disappears from org switcher
+  await (supabase as any)
+    .from('invitations')
+    .update({ status: 'left' })
+    .eq('target_user_id', user.id)
+    .eq('org_id', profile.org_id)
+    .eq('status', 'accepted');
+
   const { error } = await (supabase as any)
     .from('profiles')
     .update({
@@ -101,6 +109,7 @@ export function useLeaveOrganization() {
     onSuccess: () => {
       logAudit({ action: 'USER_LEFT', entity: 'organization' });
       queryClient.invalidateQueries({ queryKey: ['team'] });
+      queryClient.invalidateQueries({ queryKey: ['user_orgs'] });
     },
   });
 }
