@@ -59,8 +59,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (isClient && ['/clients', '/team', '/roles', '/org/audit-logs', '/settings', '/settings/billing'].includes(item.path)) return false;
 
     // For clients: always show their allowed paths (bypass perm + plan checks)
-    // Files is shown but marked locked if plan doesn't support it
     if (isClient && CLIENT_ALLOWED.has(item.path)) return true;
+
+    // For non-clients: NEVER hide plan-gated items — show them locked instead
+    // Only hide if they fail the permission check (role-based, not plan-based)
+    if (!isClient && item.planFeature) return true; // always show, lock state handled in render
 
     if (item.planFeature && !planCan(item.planFeature)) return false;
     if (!item.perm) return true;
@@ -108,10 +111,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           {nav.map((item, idx) => {
             const active = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
-            // Add separator before Platform
             const showSeparator = item.path === '/platform/overview' && idx > 0;
-            // Files locked for clients on free plan
-            const isFilesLocked = isClient && item.path === '/files' && !planCan('files' as FeatureKey);
+            // Item is locked if plan doesn't support it (for any role)
+            const isPlanLocked = !!(item.planFeature && !planCan(item.planFeature as FeatureKey));
             return (
               <React.Fragment key={item.path}>
                 {showSeparator && <div className="my-2 border-t border-border/50" />}
@@ -124,7 +126,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
                       : item.path === '/platform/overview'
                         ? 'text-violet-600 hover:bg-violet-50 hover:text-violet-700'
-                        : isFilesLocked
+                        : isPlanLocked
                           ? 'text-muted-foreground/50 hover:bg-accent hover:text-accent-foreground'
                           : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                   )}
@@ -134,10 +136,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     : item.path === '/platform/overview' ? 'text-violet-500'
                     : 'text-muted-foreground group-hover:text-foreground'
                   )} />
-                  {!collapsed && (
-                    <span className="truncate flex-1">{item.label}</span>
-                  )}
-                  {!collapsed && isFilesLocked && (
+                  {!collapsed && <span className="truncate flex-1">{item.label}</span>}
+                  {!collapsed && isPlanLocked && (
                     <Lock className="h-3 w-3 text-muted-foreground/50 shrink-0" />
                   )}
                 </Link>

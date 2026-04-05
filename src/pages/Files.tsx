@@ -198,6 +198,7 @@ if (isLoading) {
 
   // Show upgrade wall if plan doesn't include file uploads
   if (!hasFilesAccess) {
+    const isOwnerOrAdmin = user?.role === 'admin' || user?.role === 'super_admin';
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-6 max-w-md mx-auto">
         <div className="h-20 w-20 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center">
@@ -207,15 +208,23 @@ if (isLoading) {
           <h2 className="text-2xl font-bold tracking-tight text-foreground">Unlock File Sharing</h2>
           <p className="text-muted-foreground mt-2 text-sm">
             File uploads and sharing are available on Pro and Enterprise plans.
-            Upgrade to collaborate with your team using shared files.
+            {isOwnerOrAdmin
+              ? ' Upgrade your organization to unlock this feature.'
+              : ' Please contact your admin to upgrade the plan.'}
           </p>
         </div>
-        <Button className="gap-2" onClick={() => navigate('/settings/billing')}>
-          <Zap className="h-4 w-4" /> Upgrade Plan
-        </Button>
-        <p className="text-xs text-muted-foreground">
-          Pro plan starts at ₹199/mo · Cancel anytime
-        </p>
+        {isOwnerOrAdmin ? (
+          <>
+            <Button className="gap-2" onClick={() => navigate('/settings/billing')}>
+              <Zap className="h-4 w-4" /> Upgrade Plan
+            </Button>
+            <p className="text-xs text-muted-foreground">Pro plan starts at ₹199/mo · Cancel anytime</p>
+          </>
+        ) : (
+          <div className="rounded-xl border border-border/50 bg-muted/30 px-6 py-4 text-sm text-muted-foreground">
+            Contact your organization admin to upgrade the plan and unlock file sharing.
+          </div>
+        )}
       </div>
     );
   }
