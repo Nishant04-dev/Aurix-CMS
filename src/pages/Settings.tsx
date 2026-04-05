@@ -27,14 +27,16 @@ const TIMEZONES = [
 // ── Settings sub-nav ──────────────────────────────────────────
 const SETTINGS_NAV = [
   { label: 'Organization', path: '/settings',         icon: Building2 },
-  { label: 'Billing',      path: '/settings/billing', icon: CreditCard },
+  { label: 'Billing',      path: '/settings/billing', icon: CreditCard, ownerOnly: true },
 ];
 
 function SettingsNav() {
+  const { user } = useAuth();
   const location = useLocation();
+  const isOwner = user?.role === 'admin' || user?.role === 'super_admin';
   return (
     <nav className="flex flex-col gap-1">
-      {SETTINGS_NAV.map(item => {
+      {SETTINGS_NAV.filter(item => !item.ownerOnly || isOwner).map(item => {
         const active = item.path === '/settings'
           ? location.pathname === '/settings'
           : location.pathname.startsWith(item.path);

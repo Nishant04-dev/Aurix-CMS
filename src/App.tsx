@@ -98,7 +98,7 @@ function AppRoutes() {
         <Route path="/files"    element={can('view_file')     ? <Files />    : <Navigate to="/" replace />} />
 
         <Route path="/profile" element={<Profile />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/settings" element={isClientRole ? <Navigate to="/" replace /> : <Settings />} />
         <Route path="/invitations" element={<Invitations />} />
         <Route path="/support" element={<Support />} />
         <Route path="/org/audit-logs" element={<RequireAdmin><AuditLogs /></RequireAdmin>} />

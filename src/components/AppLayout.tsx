@@ -52,8 +52,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if ((item as any).adminOnly && !['admin','super_admin'].includes(user?.role ?? '')) return false;
     // Billing: only org owners (admin/super_admin) with business account
     if (item.path === '/settings/billing' && (!isOwner || accountType !== 'business')) return false;
-    // Clients, Team, Roles, Audit Logs, Invitations (send): hidden from client role
-    if (isClient && ['/clients', '/team', '/roles', '/org/audit-logs'].includes(item.path)) return false;
+    // Clients, Team, Roles, Audit Logs, Settings (org), Billing: hidden from client role
+    if (isClient && ['/clients', '/team', '/roles', '/org/audit-logs', '/settings', '/settings/billing'].includes(item.path)) return false;
     if (item.planFeature && !planCan(item.planFeature)) return false;
     if (!item.perm) return true;
     return can(item.perm);
@@ -137,10 +137,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <div className="text-sm font-semibold truncate text-foreground">{user.name}</div>
               <div className="text-[11px] text-muted-foreground truncate">{user.email}</div>
               <div className="mt-1 inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary capitalize">
-                {accountType === 'user'
-                  ? 'User'
+                {user.role === 'client'     ? 'Client'
+                  : accountType === 'user'  ? 'User'
                   : user.role === 'super_admin' ? 'Super Admin'
-                  : user.role === 'admin' ? 'Business Owner'
+                  : user.role === 'admin'   ? 'Business Owner'
                   : user.role === 'manager' ? 'Manager'
                   : user.role === 'developer' ? 'Developer'
                   : user.role === 'support' ? 'Support'
