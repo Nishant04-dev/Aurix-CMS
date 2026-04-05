@@ -2,8 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { BannedMember, MembershipAction } from '@/types/membership';
 import { logAudit } from '@/lib/auditLog';
+import { API_BASE } from '@/lib/apiUrl';
 
-const API = import.meta.env.VITE_API_URL || 'http://65.2.78.201:25569';
+const API = API_BASE;
 
 async function authHeaders() {
   const { data: { session } } = await supabase.auth.getSession();
