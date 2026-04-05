@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/((?!assets/|robots.txt|sitemap.xml|icon-.*|.*\\.).*)",
+      "destination": "/"
+    }
+  ]
+}
