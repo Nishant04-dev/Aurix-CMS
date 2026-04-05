@@ -85,6 +85,33 @@ async function fetchProfile(sessionUser: any) {
           .maybeSingle();
         orgStatus = orgData?.status ?? null;
         orgPlan   = orgData?.plan   ?? 'free';
+
+        // If current org is rejected/suspended, auto-switch to another approved org
+        if (orgStatus === 'rejected' || orgStatus === 'suspended') {
+          const { data: nextOrg } = await (supabase as any)
+            .from('organizations')
+            .select('id, status, plan')
+            .eq('owner_id', sessionUser.id)
+            .eq('status', 'approved')
+            .neq('id', resolvedOrgId)
+            .limit(1)
+            .maybeSingle();
+
+          if (nextOrg?.id) {
+            resolvedOrgId = nextOrg.id;
+            orgStatus = nextOrg.status;
+            orgPlan = nextOrg.plan ?? 'free';
+            await (supabase as any)
+              .from('profiles')
+              .update({ org_id: nextOrg.id })
+              .eq('id', sessionUser.id);
+          } else {
+            // No approved org — clear org context
+            resolvedOrgId = null;
+            orgStatus = null;
+            orgPlan = null;
+          }
+        }
       } catch { /* ignore */ }
     }
 
