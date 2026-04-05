@@ -6,7 +6,7 @@ import type { FeatureKey } from '@/lib/plans';
 import {
   LayoutDashboard, Users, FolderKanban, CheckSquare, MessageSquare,
   FileText, CreditCard, UserCog, LogOut, ChevronLeft, Menu, User as UserIcon, ShieldCheck, Globe, Settings, Mail,
-  ClipboardList, Hash, Zap
+  ClipboardList, Hash, Zap, Lock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import NotificationsPanel from '@/components/NotificationsPanel';
@@ -46,6 +46,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isOwner  = user?.role === 'admin' || user?.role === 'super_admin';
   const isClient = user?.role === 'client';
 
+  // Paths clients are always allowed to see (regardless of DB permissions)
+  const CLIENT_ALLOWED = new Set(['/', '/projects', '/tasks', '/messages', '/invoices', '/files', '/org/chat', '/invitations', '/profile', '/support']);
+
   // Filter nav items by permission + platform owner + plan
   const nav = NAV_ITEMS.filter(item => {
     if (item.superAdminOnly && !isPlatformOwner) return false;
@@ -54,6 +57,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (item.path === '/settings/billing' && (!isOwner || accountType !== 'business')) return false;
     // Clients, Team, Roles, Audit Logs, Settings (org), Billing: hidden from client role
     if (isClient && ['/clients', '/team', '/roles', '/org/audit-logs', '/settings', '/settings/billing'].includes(item.path)) return false;
+
+    // For clients: always show their allowed paths (bypass perm + plan checks)
+    // Files is shown but marked locked if plan doesn't support it
+    if (isClient && CLIENT_ALLOWED.has(item.path)) return true;
+
     if (item.planFeature && !planCan(item.planFeature)) return false;
     if (!item.perm) return true;
     return can(item.perm);
@@ -101,7 +109,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {nav.map((item, idx) => {
             const active = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
             // Add separator before Platform
-            const showSeparator = item.path === '/platform' && idx > 0;
+            const showSeparator = item.path === '/platform/overview' && idx > 0;
+            // Files locked for clients on free plan
+            const isFilesLocked = isClient && item.path === '/files' && !planCan('files' as FeatureKey);
             return (
               <React.Fragment key={item.path}>
                 {showSeparator && <div className="my-2 border-t border-border/50" />}
@@ -112,17 +122,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
                     active
                       ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
-                      : item.path === '/platform'
+                      : item.path === '/platform/overview'
                         ? 'text-violet-600 hover:bg-violet-50 hover:text-violet-700'
-                        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                        : isFilesLocked
+                          ? 'text-muted-foreground/50 hover:bg-accent hover:text-accent-foreground'
+                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                   )}
                 >
                   <item.icon className={cn('h-[18px] w-[18px] shrink-0 transition-colors',
                     active ? 'text-primary-foreground'
-                    : item.path === '/platform' ? 'text-violet-500'
+                    : item.path === '/platform/overview' ? 'text-violet-500'
                     : 'text-muted-foreground group-hover:text-foreground'
                   )} />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
+                  {!collapsed && (
+                    <span className="truncate flex-1">{item.label}</span>
+                  )}
+                  {!collapsed && isFilesLocked && (
+                    <Lock className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                  )}
                 </Link>
               </React.Fragment>
             );

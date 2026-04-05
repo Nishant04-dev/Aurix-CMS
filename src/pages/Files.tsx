@@ -1,16 +1,18 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Upload, FileText, Image, File, Loader2, Download, Trash2, FolderOpen, Search, Edit3, Eye } from 'lucide-react';
+import { Upload, FileText, Image, File, Loader2, Download, Trash2, FolderOpen, Search, Edit3, Eye, Lock, Zap } from 'lucide-react';
 import { useFiles, useProjects } from '@/hooks/use-database';
 import { usePermissions } from '@/hooks/use-permissions';
 import { usePlanLimits } from '@/hooks/use-plan-limits';
+import { usePlan } from '@/hooks/use-plan';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
 import {
   Select,
   SelectContent,
@@ -39,9 +41,12 @@ const typeIcons: Record<string, React.ElementType> = {
 
 export default function Files() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
   const { canUploadFile, limits } = usePlanLimits();
+  const { can: planCan } = usePlan();
+  const hasFilesAccess = planCan('files');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const canUpload = can('upload_file') && canUploadFile;
   const canDelete = can('delete_file');
@@ -187,6 +192,30 @@ if (isLoading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary/40" />
+      </div>
+    );
+  }
+
+  // Show upgrade wall if plan doesn't include file uploads
+  if (!hasFilesAccess) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-6 max-w-md mx-auto">
+        <div className="h-20 w-20 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center">
+          <Lock className="h-9 w-9 text-amber-500" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">Unlock File Sharing</h2>
+          <p className="text-muted-foreground mt-2 text-sm">
+            File uploads and sharing are available on Pro and Enterprise plans.
+            Upgrade to collaborate with your team using shared files.
+          </p>
+        </div>
+        <Button className="gap-2" onClick={() => navigate('/settings/billing')}>
+          <Zap className="h-4 w-4" /> Upgrade Plan
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          Pro plan starts at ₹199/mo · Cancel anytime
+        </p>
       </div>
     );
   }

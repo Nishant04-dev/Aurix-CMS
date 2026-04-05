@@ -91,11 +91,11 @@ function AppRoutes() {
         <Route path="/clients"  element={can('view_client')   ? <Clients />  : <Navigate to="/" replace />} />
         <Route path="/team"     element={can('invite_user')   ? <Team />     : <Navigate to="/" replace />} />
         <Route path="/roles"    element={can('manage_roles')  ? <Roles />    : <Navigate to="/" replace />} />
-        <Route path="/projects" element={can('view_project')  ? <Projects /> : <Navigate to="/" replace />} />
-        <Route path="/tasks"    element={can('view_project')  ? <Tasks />    : <Navigate to="/" replace />} />
-        <Route path="/invoices" element={can('view_invoices') ? <Invoices /> : <Navigate to="/" replace />} />
-        <Route path="/messages" element={can('view_project')  ? <Messages /> : <Navigate to="/" replace />} />
-        <Route path="/files"    element={can('view_file')     ? <Files />    : <Navigate to="/" replace />} />
+        <Route path="/projects" element={isClientRole || can('view_project')  ? <Projects /> : <Navigate to="/" replace />} />
+        <Route path="/tasks"    element={isClientRole || can('view_project')  ? <Tasks />    : <Navigate to="/" replace />} />
+        <Route path="/invoices" element={isClientRole || can('view_invoices') ? <Invoices /> : <Navigate to="/" replace />} />
+        <Route path="/messages" element={isClientRole || can('view_project')  ? <Messages /> : <Navigate to="/" replace />} />
+        <Route path="/files"    element={isClientRole || can('view_file')     ? <Files />    : <Navigate to="/" replace />} />
 
         <Route path="/profile" element={<Profile />} />
         <Route path="/settings" element={isClientRole ? <Navigate to="/" replace /> : <Settings />} />
