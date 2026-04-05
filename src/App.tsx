@@ -74,6 +74,7 @@ function AppRoutes() {
 
   // Only business users without an org need onboarding
   // Individual ("user") accounts go straight to dashboard
+  // Also skip onboarding if user has accepted invitations to other orgs (they just left one)
   if (accountType === 'business' && !orgId) return <Onboarding />;
 
   // Business users with an org that isn't approved yet → waiting page

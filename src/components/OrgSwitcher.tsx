@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { cn } from '@/lib/utils';
 import { ChevronDown, Check, Loader2 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -13,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { useOrgSettings } from '@/hooks/use-org-settings';
 
 interface OrgOption {
   org_id: string;
@@ -25,21 +25,29 @@ interface OrgOption {
 
 export function OrgSwitcher() {
   const { orgId, refreshUser } = useAuth();
+  const { settings } = useOrgSettings(); // current org name — always available
   const { toast } = useToast();
   const [switching, setSwitching] = useState(false);
 
-  const { data: orgs = [], isLoading } = useQuery<OrgOption[]>({
+  const { data: orgs = [] } = useQuery<OrgOption[]>({
     queryKey: ['user_orgs'],
     queryFn: async () => {
       const { data, error } = await (supabase as any).rpc('get_user_organizations');
-      if (error) throw error;
+      if (error) {
+        console.warn('get_user_organizations failed:', error.message);
+        return [];
+      }
       return data || [];
     },
     staleTime: 60_000,
+    retry: false,
   });
 
-  const current = orgs.find(o => o.org_id === orgId) ?? orgs[0];
   const hasMultiple = orgs.length > 1;
+  const currentOrgName = settings?.name ?? orgs.find(o => o.org_id === orgId)?.org_name;
+
+  // Don't render if no org at all
+  if (!orgId || !currentOrgName) return null;
 
   const handleSwitch = async (org: OrgOption) => {
     if (org.org_id === orgId || switching) return;
@@ -60,26 +68,17 @@ export function OrgSwitcher() {
     }
   };
 
-  // Always show current org name; only show dropdown chevron if multiple orgs
-  if (isLoading || !current) {
-    return (
-      <div className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground border border-border/50 rounded-full px-2.5 py-1 bg-muted/30">
-        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-        <span className="font-medium">Loading...</span>
-      </div>
-    );
-  }
-
+  // Single org — just show name pill, no dropdown
   if (!hasMultiple) {
-    // Just show org name, no dropdown
     return (
       <div className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground border border-border/50 rounded-full px-2.5 py-1 bg-muted/30">
         <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
-        <span className="font-medium truncate max-w-[140px]">{current.org_name}</span>
+        <span className="font-medium truncate max-w-[140px]">{currentOrgName}</span>
       </div>
     );
   }
 
+  // Multiple orgs — show dropdown switcher
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -88,7 +87,7 @@ export function OrgSwitcher() {
             ? <Loader2 className="h-3 w-3 animate-spin shrink-0" />
             : <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
           }
-          <span className="truncate flex-1">{current.org_name}</span>
+          <span className="truncate flex-1">{currentOrgName}</span>
           <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
         </button>
       </DropdownMenuTrigger>
@@ -112,8 +111,7 @@ export function OrgSwitcher() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold truncate">{org.org_name}</p>
               <p className="text-[10px] text-muted-foreground capitalize">
-                {org.is_owner ? 'Owner' : org.role}
-                {' · '}{org.org_plan}
+                {org.is_owner ? 'Owner' : org.role} · {org.org_plan}
               </p>
             </div>
             {org.org_id === orgId && (

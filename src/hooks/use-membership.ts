@@ -32,7 +32,7 @@ async function get(path: string) {
   return json.data;
 }
 
-// Leave org directly via Supabase — no backend round-trip needed
+// Leave org — auto-switch to another org if available, otherwise clear
 async function leaveOrgDirect() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
@@ -57,12 +57,27 @@ async function leaveOrgDirect() {
     }
   }
 
+  // Find another org to switch to (accepted invitations to other orgs)
+  const { data: otherInvites } = await (supabase as any)
+    .from('invitations')
+    .select('org_id, role_name')
+    .eq('target_user_id', user.id)
+    .eq('status', 'accepted')
+    .neq('org_id', profile.org_id)
+    .limit(1);
+
+  const nextOrg = otherInvites?.[0];
+
   const { error } = await (supabase as any)
     .from('profiles')
-    .update({ org_id: null })
+    .update({
+      org_id: nextOrg?.org_id ?? null,
+      role: nextOrg ? (nextOrg.role_name ?? 'client') : 'client',
+    })
     .eq('id', user.id);
 
   if (error) throw new Error(error.message);
+  return { nextOrgId: nextOrg?.org_id ?? null };
 }
 
 export function useLeaveOrganization() {
