@@ -32,74 +32,26 @@ async function get(path: string) {
   return json.data;
 }
 
-// Leave org — auto-switch to another org if available (owned or joined), otherwise clear
+// Leave org — uses atomic DB function to update invitations + profile in one transaction
 async function leaveOrgDirect() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
   const { data: profile } = await (supabase as any)
     .from('profiles')
-    .select('org_id, role')
+    .select('org_id')
     .eq('id', user.id)
     .single();
 
   if (!profile?.org_id) throw new Error('You are not in an organization');
 
-  // Block sole superadmin from leaving
-  if (profile.role === 'super_admin') {
-    const { count } = await (supabase as any)
-      .from('profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('org_id', profile.org_id)
-      .in('role', ['super_admin']);
-    if ((count ?? 0) <= 1) {
-      throw new Error('You are the only owner. Transfer ownership before leaving.');
-    }
-  }
-
-  // Find next org: first check owned orgs, then accepted invitations
-  const { data: ownedOrgs } = await (supabase as any)
-    .from('organizations')
-    .select('id')
-    .eq('owner_id', user.id)
-    .neq('id', profile.org_id)
-    .limit(1);
-
-  let nextOrgId: string | null = ownedOrgs?.[0]?.id ?? null;
-  let nextRole = 'admin';
-
-  if (!nextOrgId) {
-    const { data: otherInvites } = await (supabase as any)
-      .from('invitations')
-      .select('org_id, role_name')
-      .eq('target_user_id', user.id)
-      .eq('status', 'accepted')
-      .neq('org_id', profile.org_id)
-      .limit(1);
-    nextOrgId = otherInvites?.[0]?.org_id ?? null;
-    nextRole = otherInvites?.[0]?.role_name ?? 'client';
-  }
-
-  // Mark the invitation for the left org as 'left' so it disappears from org switcher
-  await (supabase as any)
-    .from('invitations')
-    .update({ status: 'left' })
-    .eq('target_user_id', user.id)
-    .eq('org_id', profile.org_id)
-    .eq('status', 'accepted');
-
-  const { error } = await (supabase as any)
-    .from('profiles')
-    .update({
-      org_id: nextOrgId,
-      role: nextOrgId ? nextRole : 'client',
-      // Reset account_type to 'user' only if truly no org left
-      account_type: nextOrgId ? 'business' : 'user',
-    })
-    .eq('id', user.id);
+  const { data, error } = await (supabase as any)
+    .rpc('leave_organization', { p_org_id: profile.org_id });
 
   if (error) throw new Error(error.message);
-  return { nextOrgId };
+  if (data?.error) throw new Error(data.error);
+
+  return { nextOrgId: data?.next_org_id ?? null };
 }
 
 export function useLeaveOrganization() {
