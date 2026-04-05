@@ -2,15 +2,15 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { ChevronDown, Check, Loader2 } from 'lucide-react';
+import { ChevronDown, Check, Loader2, Building2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useOrgSettings } from '@/hooks/use-org-settings';
 
@@ -25,7 +25,7 @@ interface OrgOption {
 
 export function OrgSwitcher() {
   const { orgId, refreshUser } = useAuth();
-  const { settings } = useOrgSettings(); // current org name — always available
+  const { settings } = useOrgSettings();
   const { toast } = useToast();
   const [switching, setSwitching] = useState(false);
 
@@ -34,7 +34,7 @@ export function OrgSwitcher() {
     queryFn: async () => {
       const { data, error } = await (supabase as any).rpc('get_user_organizations');
       if (error) {
-        console.warn('get_user_organizations failed:', error.message);
+        console.warn('get_user_organizations:', error.message);
         return [];
       }
       return data || [];
@@ -43,14 +43,16 @@ export function OrgSwitcher() {
     retry: false,
   });
 
-  const hasMultiple = orgs.length > 1;
+  // Use org settings name (already loaded) as primary, fallback to RPC result
   const currentOrgName = settings?.name ?? orgs.find(o => o.org_id === orgId)?.org_name;
 
-  // Don't render if no org at all
+  // Don't render if no org
   if (!orgId || !currentOrgName) return null;
 
+  const otherOrgs = orgs.filter(o => o.org_id !== orgId);
+
   const handleSwitch = async (org: OrgOption) => {
-    if (org.org_id === orgId || switching) return;
+    if (switching) return;
     setSwitching(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -61,6 +63,7 @@ export function OrgSwitcher() {
       if (error) throw error;
       await refreshUser();
       toast({ title: `Switched to ${org.org_name}` });
+      window.location.reload();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Switch failed', description: err.message });
     } finally {
@@ -68,17 +71,6 @@ export function OrgSwitcher() {
     }
   };
 
-  // Single org — just show name pill, no dropdown
-  if (!hasMultiple) {
-    return (
-      <div className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground border border-border/50 rounded-full px-2.5 py-1 bg-muted/30">
-        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
-        <span className="font-medium truncate max-w-[140px]">{currentOrgName}</span>
-      </div>
-    );
-  }
-
-  // Multiple orgs — show dropdown switcher
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -96,29 +88,52 @@ export function OrgSwitcher() {
           Switch Organization
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {orgs.map(org => (
-          <DropdownMenuItem
-            key={org.org_id}
-            onClick={() => handleSwitch(org)}
-            className="flex items-center gap-3 cursor-pointer py-2.5"
-          >
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0 overflow-hidden">
-              {org.org_logo
-                ? <img src={org.org_logo} alt={org.org_name} className="h-full w-full object-cover" />
-                : org.org_name.charAt(0).toUpperCase()
-              }
+
+        {/* Current org */}
+        <DropdownMenuItem className="flex items-center gap-3 py-2.5 opacity-60 cursor-default" disabled>
+          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
+            {currentOrgName.charAt(0).toUpperCase()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold truncate">{currentOrgName}</p>
+            <p className="text-[10px] text-muted-foreground">Current</p>
+          </div>
+          <Check className="h-3.5 w-3.5 text-primary shrink-0" />
+        </DropdownMenuItem>
+
+        {otherOrgs.length > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            {otherOrgs.map(org => (
+              <DropdownMenuItem
+                key={org.org_id}
+                onClick={() => handleSwitch(org)}
+                className="flex items-center gap-3 cursor-pointer py-2.5"
+              >
+                <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground text-xs font-bold shrink-0 overflow-hidden">
+                  {org.org_logo
+                    ? <img src={org.org_logo} alt={org.org_name} className="h-full w-full object-cover" />
+                    : org.org_name.charAt(0).toUpperCase()
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{org.org_name}</p>
+                  <p className="text-[10px] text-muted-foreground capitalize">
+                    {org.is_owner ? 'Owner' : org.role} · {org.org_plan}
+                  </p>
+                </div>
+              </DropdownMenuItem>
+            ))}
+          </>
+        ) : (
+          <>
+            <DropdownMenuSeparator />
+            <div className="px-3 py-4 text-center">
+              <Building2 className="h-6 w-6 mx-auto mb-1.5 text-muted-foreground/40" />
+              <p className="text-xs text-muted-foreground">No other organizations</p>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate">{org.org_name}</p>
-              <p className="text-[10px] text-muted-foreground capitalize">
-                {org.is_owner ? 'Owner' : org.role} · {org.org_plan}
-              </p>
-            </div>
-            {org.org_id === orgId && (
-              <Check className="h-3.5 w-3.5 text-primary shrink-0" />
-            )}
-          </DropdownMenuItem>
-        ))}
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
