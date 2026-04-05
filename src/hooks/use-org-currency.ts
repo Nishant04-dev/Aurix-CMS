@@ -7,16 +7,16 @@ export function useOrgCurrency() {
   const { orgId } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: currencyCode = 'USD' } = useQuery({
+  const { data: currencyCode = 'INR' } = useQuery({
     queryKey: ['org_currency', orgId],
     queryFn: async () => {
-      if (!orgId) return 'USD';
+      if (!orgId) return 'INR';
       const { data } = await supabase
         .from('organizations')
         .select('currency')
         .eq('id', orgId)
         .single();
-      return (data as any)?.currency ?? 'USD';
+      return (data as any)?.currency ?? 'INR';
     },
     enabled: !!orgId,
     staleTime: 5 * 60 * 1000,

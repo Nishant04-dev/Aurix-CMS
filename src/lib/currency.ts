@@ -25,7 +25,7 @@ export function getCurrency(code: string): Currency {
  * Format an amount with the correct currency symbol and locale.
  * Uses Intl.NumberFormat for proper locale-aware formatting.
  */
-export function formatCurrency(amount: number, currencyCode: string = 'USD'): string {
+export function formatCurrency(amount: number, currencyCode: string = 'INR'): string {
   const currency = getCurrency(currencyCode);
   try {
     return new Intl.NumberFormat(currency.locale, {
@@ -43,7 +43,7 @@ export function formatCurrency(amount: number, currencyCode: string = 'USD'): st
 /**
  * Format a compact amount (e.g. ₹8.2K, $1.2M)
  */
-export function formatCurrencyCompact(amount: number, currencyCode: string = 'USD'): string {
+export function formatCurrencyCompact(amount: number, currencyCode: string = 'INR'): string {
   const currency = getCurrency(currencyCode);
   if (amount >= 1_000_000) return `${currency.symbol}${(amount / 1_000_000).toFixed(1)}M`;
   if (amount >= 1_000)     return `${currency.symbol}${(amount / 1_000).toFixed(1)}K`;

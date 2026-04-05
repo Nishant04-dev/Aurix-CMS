@@ -68,7 +68,7 @@ function OrgSettingsForm() {
 
   const [form, setForm] = useState({
     name: '', website: '', phone: '', address: '',
-    logo_url: '', gst_number: '', currency: 'USD', timezone: 'UTC',
+    logo_url: '', gst_number: '', currency: 'INR', timezone: 'UTC',
   });
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -83,7 +83,7 @@ function OrgSettingsForm() {
         address:    settings.address     || '',
         logo_url:   settings.logo_url    || '',
         gst_number: settings.gst_number  || '',
-        currency:   settings.currency    || 'USD',
+        currency:   settings.currency    || 'INR',
         timezone:   settings.timezone    || 'UTC',
       });
       setLogoPreview(settings.logo_url || null);

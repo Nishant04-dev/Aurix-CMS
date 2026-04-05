@@ -22,8 +22,8 @@ export default function PlatformRevenue() {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-3">
-        <MetricCard title="Total Revenue"  value="$0"  icon={DollarSign}  accent="bg-emerald-50 text-emerald-600" sub="Billing integration pending" />
-        <MetricCard title="MRR"            value="$0"  icon={TrendingUp}  accent="bg-blue-50 text-blue-600"    sub="Monthly recurring revenue" />
+        <MetricCard title="Total Revenue"  value="₹0"  icon={DollarSign}  accent="bg-emerald-50 text-emerald-600" sub="Billing integration pending" />
+        <MetricCard title="MRR"            value="₹0"  icon={TrendingUp}  accent="bg-blue-50 text-blue-600"    sub="Monthly recurring revenue" />
         <MetricCard title="Active Paying"  value="0"   icon={CreditCard}  accent="bg-violet-50 text-violet-600" sub="Paid subscriptions" />
       </div>
       <Card className="border-border/50">

@@ -149,7 +149,7 @@ export default function Platform() {
         <StatCard title="Total Organizations" value={stats?.total_orgs ?? 0}   icon={Building2} accent="bg-blue-50 text-blue-600" />
         <StatCard title="Total Users"         value={stats?.total_users ?? 0}  icon={Users}     accent="bg-violet-50 text-violet-600" />
         <StatCard title="Active Subscriptions" value={stats?.active_subs ?? 0} icon={CreditCard} accent="bg-emerald-50 text-emerald-600" />
-        <StatCard title="Total Revenue"       value="$0"                        icon={DollarSign} accent="bg-amber-50 text-amber-600" sub="Billing integration pending" />
+        <StatCard title="Total Revenue"       value="₹0"                        icon={DollarSign} accent="bg-amber-50 text-amber-600" sub="Billing integration pending" />
       </div>
 
       {/* Pending Organizations — approval queue */}
