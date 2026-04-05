@@ -99,10 +99,14 @@ export default function Tasks() {
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Task Management</h1>
-          <p className="text-muted-foreground mt-1 text-sm font-medium">Coordinate deliverables and track progress across all projects.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            {isClientUser ? 'My Tasks' : 'Task Management'}
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm font-medium">
+            {isClientUser ? 'View your assigned tasks.' : 'Coordinate deliverables and track progress across all projects.'}
+          </p>
         </div>
-        <TaskFormModal onSuccess={() => refetch()} />
+        {!isClientUser && <TaskFormModal onSuccess={() => refetch()} />}
       </div>
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-2 border-b border-border/30 pb-6">
@@ -151,10 +155,12 @@ export default function Tasks() {
             <div key={task.id} className="group relative flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border border-border/50 bg-card p-5 hover:shadow-md transition-all duration-300 hover:border-primary/20">
               <div className="flex items-center gap-4 flex-1">
                 <button 
-                  onClick={() => updateTaskStatus(task.id, task.status === 'done' ? 'todo' : 'done')}
+                  onClick={() => !isClientUser && updateTaskStatus(task.id, task.status === 'done' ? 'todo' : 'done')}
+                  disabled={isClientUser}
                   className={cn(
                     'h-6 w-6 rounded-full border-2 flex items-center justify-center transition-all shrink-0',
-                    task.status === 'done' ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-muted-foreground/30 hover:border-primary'
+                    task.status === 'done' ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-muted-foreground/30 hover:border-primary',
+                    isClientUser && 'cursor-default opacity-60'
                   )}
                 >
                   {task.status === 'done' && <CheckCircle2 className="h-4 w-4" />}
@@ -203,6 +209,7 @@ export default function Tasks() {
                   {cfg.label}
                 </span>
 
+                {!isClientUser && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="p-2 hover:bg-accent rounded-full transition-colors opacity-0 group-hover:opacity-100">
@@ -241,6 +248,7 @@ export default function Tasks() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                )}
               </div>
             </div>
           );

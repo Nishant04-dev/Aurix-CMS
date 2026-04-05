@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/use-permissions';
 import { usePlan } from '@/hooks/use-plan';
+import { useOrgSettings } from '@/hooks/use-org-settings';
 import type { FeatureKey } from '@/lib/plans';
 import {
   LayoutDashboard, Users, FolderKanban, CheckSquare, MessageSquare,
@@ -37,6 +38,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, logout, isPlatformOwner, accountType } = useAuth();
   const { can } = usePermissions();
   const { can: planCan, planName } = usePlan();
+  const { settings: orgSettings } = useOrgSettings();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -208,6 +210,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <span className="text-muted-foreground font-normal">/</span>
               {nav.find(n => n.path === '/' ? location.pathname === '/' : location.pathname.startsWith(n.path))?.label || (location.pathname === '/profile' ? 'Profile' : location.pathname === '/settings' ? 'Settings' : 'Aurix')}
             </div>
+            {orgSettings?.name && (
+              <div className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground border border-border/50 rounded-full px-2.5 py-1 bg-muted/30">
+                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span className="font-medium truncate max-w-[140px]">{orgSettings.name}</span>
+              </div>
+            )}
           </div>
           
           <div className="flex items-center gap-4">
