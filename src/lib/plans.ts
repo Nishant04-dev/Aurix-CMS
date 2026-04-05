@@ -1,0 +1,118 @@
+export type PlanId = 'free' | 'pro' | 'enterprise';
+
+export type FeatureKey =
+  | 'dashboard'
+  | 'clients'
+  | 'clients_limited'
+  | 'projects'
+  | 'tasks'
+  | 'messages'
+  | 'invoices'
+  | 'invoices_basic'
+  | 'files'
+  | 'team'
+  | 'team_limited'
+  | 'roles_basic'
+  | 'roles_advanced'
+  | 'invitations'
+  | 'team_chat'
+  | 'audit_logs'
+  | 'audit_logs_limited'
+  | 'settings'
+  | 'platform'
+  | 'all';
+
+export interface Plan {
+  name: string;
+  price: number;
+  maxMembers: number;   // -1 = unlimited
+  maxClients: number;   // -1 = unlimited
+  features: FeatureKey[];
+}
+
+export const PLANS: Record<PlanId, Plan> = {
+  free: {
+    name: 'Free',
+    price: 0,
+    maxMembers: 2,
+    maxClients: 3,
+    features: [
+      'dashboard',
+      'clients_limited',
+      'projects',
+      'tasks',
+      'messages',
+      'invoices_basic',
+      'team_limited',
+      'invitations',
+    ],
+  },
+  pro: {
+    name: 'Pro',
+    price: 199,
+    maxMembers: 10,
+    maxClients: -1,
+    features: [
+      'dashboard',
+      'clients',
+      'projects',
+      'tasks',
+      'messages',
+      'invoices',
+      'files',
+      'team',
+      'roles_basic',
+      'invitations',
+      'team_chat',
+      'audit_logs_limited',
+      'settings',
+    ],
+  },
+  enterprise: {
+    name: 'Enterprise',
+    price: 599,
+    maxMembers: -1,
+    maxClients: -1,
+    features: ['all'],
+  },
+};
+
+/**
+ * Check if an org's plan includes a specific feature.
+ * Enterprise plan with 'all' always returns true.
+ * Also handles implied features: e.g. 'clients' implies 'clients_limited'.
+ */
+export function hasFeature(plan: PlanId | null | undefined, feature: FeatureKey): boolean {
+  const p = PLANS[plan ?? 'free'];
+  if (!p) return false;
+  if (p.features.includes('all')) return true;
+  if (p.features.includes(feature)) return true;
+
+  // Implied: full feature implies limited version
+  const implied: Partial<Record<FeatureKey, FeatureKey>> = {
+    clients_limited: 'clients',
+    invoices_basic:  'invoices',
+    team_limited:    'team',
+    roles_basic:     'roles_advanced',
+    audit_logs_limited: 'audit_logs',
+  };
+  const full = implied[feature];
+  if (full && p.features.includes(full)) return true;
+
+  return false;
+}
+
+/** Human-readable upgrade message for a locked feature */
+export function upgradeMessage(feature: FeatureKey): string {
+  const messages: Partial<Record<FeatureKey, string>> = {
+    files:              'File uploads require the Pro plan.',
+    team_chat:          'Team Chat requires the Pro plan.',
+    invitations:        'Invitations require the Pro plan.',
+    audit_logs:         'Full Audit Logs require the Enterprise plan.',
+    audit_logs_limited: 'Audit Logs require the Pro plan.',
+    roles_basic:        'Role management requires the Pro plan.',
+    roles_advanced:     'Advanced roles require the Enterprise plan.',
+    platform:           'Platform access requires the Enterprise plan.',
+  };
+  return messages[feature] ?? 'Upgrade your plan to unlock this feature.';
+}

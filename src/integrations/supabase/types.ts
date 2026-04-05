@@ -88,6 +88,47 @@ export type Database = {
           },
         ]
       }
+      approval_requests: {
+        Row: {
+          created_at: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+          project_id: string
+          requested_by: string
+          status: string
+          change_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          project_id: string
+          requested_by: string
+          status?: string
+          change_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          project_id?: string
+          requested_by?: string
+          status?: string
+          change_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_requests_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_items: {
         Row: {
           amount: number
@@ -174,7 +215,6 @@ export type Database = {
           created_at: string
           id: string
           project_id: string | null
-          recipient_id: string
           sender_id: string
         }
         Insert: {
@@ -182,7 +222,6 @@ export type Database = {
           created_at?: string
           id?: string
           project_id?: string | null
-          recipient_id: string
           sender_id: string
         }
         Update: {
@@ -190,7 +229,6 @@ export type Database = {
           created_at?: string
           id?: string
           project_id?: string | null
-          recipient_id?: string
           sender_id?: string
         }
         Relationships: [
@@ -232,63 +270,98 @@ export type Database = {
       }
       profiles: {
         Row: {
-          avatar_url: string | null
-          created_at: string
-          display_name: string
+          created_at: string | null
           email: string | null
           id: string
-          updated_at: string
-          user_id: string
+          name: string | null
+          role: string | null
         }
         Insert: {
-          avatar_url?: string | null
-          created_at?: string
-          display_name: string
+          created_at?: string | null
           email?: string | null
-          id?: string
-          updated_at?: string
-          user_id: string
+          id: string
+          name?: string | null
+          role?: string | null
         }
         Update: {
-          avatar_url?: string | null
-          created_at?: string
-          display_name?: string
+          created_at?: string | null
           email?: string | null
           id?: string
-          updated_at?: string
-          user_id?: string
+          name?: string | null
+          role?: string | null
         }
         Relationships: []
       }
+      project_members: {
+        Row: {
+          created_at: string | null
+          id: string
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_members_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
+          budget_spent: number | null
+          budget_total: number | null
           client_id: string
           created_at: string
           deadline: string | null
           description: string | null
+          developer_ids: string[] | null
           id: string
+          manager_id: string | null
           progress: number
           status: string
           title: string
           updated_at: string
         }
         Insert: {
+          budget_spent?: number | null
+          budget_total?: number | null
           client_id: string
           created_at?: string
           deadline?: string | null
           description?: string | null
+          developer_ids?: string[] | null
           id?: string
+          manager_id?: string | null
           progress?: number
           status?: string
           title: string
           updated_at?: string
         }
         Update: {
+          budget_spent?: number | null
+          budget_total?: number | null
           client_id?: string
           created_at?: string
           deadline?: string | null
           description?: string | null
+          developer_ids?: string[] | null
           id?: string
+          manager_id?: string | null
           progress?: number
           status?: string
           title?: string
@@ -338,6 +411,7 @@ export type Database = {
       }
       tasks: {
         Row: {
+          assigned_to_id: string | null
           assignee_id: string | null
           created_at: string
           description: string | null
@@ -349,6 +423,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assigned_to_id?: string | null
           assignee_id?: string | null
           created_at?: string
           description?: string | null
@@ -360,6 +435,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assigned_to_id?: string | null
           assignee_id?: string | null
           created_at?: string
           description?: string | null
@@ -410,6 +486,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      promote_to_admin: { Args: { email_text: string }; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "team" | "client"

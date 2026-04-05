@@ -2,8 +2,8 @@ import type { User, Client, Project, Task, Message, Invoice, FileItem, Notificat
 
 export const users: User[] = [
   { id: 'u1', name: 'Sarah Mitchell', email: 'sarah@aurix.com', role: 'admin', createdAt: '2024-01-01' },
-  { id: 'u2', name: 'James Carter', email: 'james@aurix.com', role: 'team', createdAt: '2024-01-15' },
-  { id: 'u3', name: 'Emily Chen', email: 'emily@aurix.com', role: 'team', createdAt: '2024-02-01' },
+  { id: 'u2', name: 'James Carter', email: 'james@aurix.com', role: 'manager', createdAt: '2024-01-15' },
+  { id: 'u3', name: 'Emily Chen', email: 'emily@aurix.com', role: 'developer', createdAt: '2024-02-01' },
   { id: 'u4', name: 'Michael Torres', email: 'michael@novacorp.com', role: 'client', createdAt: '2024-02-10' },
   { id: 'u5', name: 'Lisa Park', email: 'lisa@brightedge.io', role: 'client', createdAt: '2024-03-01' },
 ];
