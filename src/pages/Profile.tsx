@@ -26,7 +26,7 @@ const ROLE_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export default function Profile() {
-  const { user, accountType, upgradeToBusinessAccount, logout, orgId } = useAuth();
+  const { user, accountType, upgradeToBusinessAccount, logout, orgId, refreshUser } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [upgradingBusiness, setUpgradingBusiness] = useState(false);
@@ -385,10 +385,13 @@ export default function Profile() {
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   onClick={async () => {
                     try {
-                      await leaveOrg.mutateAsync();
+                      const result = await leaveOrg.mutateAsync();
                       toast({ title: 'You left the organization' });
                       setConfirmLeave(false);
-                      logout();
+                      // Refresh auth context — if another org was found, stay in app
+                      // If no org left, account_type is now 'user' → App.tsx handles routing
+                      await refreshUser();
+                      navigate('/');
                     } catch (err: any) {
                       toast({ variant: 'destructive', title: 'Error', description: err.message });
                       setConfirmLeave(false);

@@ -32,7 +32,7 @@ async function get(path: string) {
   return json.data;
 }
 
-// Leave org — auto-switch to another org if available, otherwise clear
+// Leave org — auto-switch to another org if available (owned or joined), otherwise clear
 async function leaveOrgDirect() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
@@ -45,7 +45,7 @@ async function leaveOrgDirect() {
 
   if (!profile?.org_id) throw new Error('You are not in an organization');
 
-  // Block sole superadmin
+  // Block sole superadmin from leaving
   if (profile.role === 'super_admin') {
     const { count } = await (supabase as any)
       .from('profiles')
@@ -57,27 +57,41 @@ async function leaveOrgDirect() {
     }
   }
 
-  // Find another org to switch to (accepted invitations to other orgs)
-  const { data: otherInvites } = await (supabase as any)
-    .from('invitations')
-    .select('org_id, role_name')
-    .eq('target_user_id', user.id)
-    .eq('status', 'accepted')
-    .neq('org_id', profile.org_id)
+  // Find next org: first check owned orgs, then accepted invitations
+  const { data: ownedOrgs } = await (supabase as any)
+    .from('organizations')
+    .select('id')
+    .eq('owner_id', user.id)
+    .neq('id', profile.org_id)
     .limit(1);
 
-  const nextOrg = otherInvites?.[0];
+  let nextOrgId: string | null = ownedOrgs?.[0]?.id ?? null;
+  let nextRole = 'admin';
+
+  if (!nextOrgId) {
+    const { data: otherInvites } = await (supabase as any)
+      .from('invitations')
+      .select('org_id, role_name')
+      .eq('target_user_id', user.id)
+      .eq('status', 'accepted')
+      .neq('org_id', profile.org_id)
+      .limit(1);
+    nextOrgId = otherInvites?.[0]?.org_id ?? null;
+    nextRole = otherInvites?.[0]?.role_name ?? 'client';
+  }
 
   const { error } = await (supabase as any)
     .from('profiles')
     .update({
-      org_id: nextOrg?.org_id ?? null,
-      role: nextOrg ? (nextOrg.role_name ?? 'client') : 'client',
+      org_id: nextOrgId,
+      role: nextOrgId ? nextRole : 'client',
+      // Reset account_type to 'user' only if truly no org left
+      account_type: nextOrgId ? 'business' : 'user',
     })
     .eq('id', user.id);
 
   if (error) throw new Error(error.message);
-  return { nextOrgId: nextOrg?.org_id ?? null };
+  return { nextOrgId };
 }
 
 export function useLeaveOrganization() {
