@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import {
   Building2, Users, CreditCard, DollarSign, Loader2, Activity,
   ArrowUpRight, Globe, Shield, Zap, ToggleLeft, Eye,
-  CheckCircle2, XCircle, Clock,
+  CheckCircle2, XCircle, Clock, PauseCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -34,6 +34,13 @@ const PLAN_STYLES: Record<string, string> = {
   free:       'bg-slate-100 text-slate-600 border-slate-200',
   pro:        'bg-blue-50 text-blue-600 border-blue-100',
   enterprise: 'bg-violet-50 text-violet-600 border-violet-100',
+};
+
+const STATUS_STYLES: Record<string, string> = {
+  approved:  'bg-emerald-50 text-emerald-600 border-emerald-200',
+  pending:   'bg-amber-50 text-amber-600 border-amber-200',
+  suspended: 'bg-orange-50 text-orange-600 border-orange-200',
+  rejected:  'bg-rose-50 text-rose-600 border-rose-200',
 };
 
 function StatCard({ title, value, icon: Icon, accent, sub }: {
@@ -89,12 +96,13 @@ export default function Platform() {
 
   useEffect(() => { loadData(); }, []);
 
-  const handleOrgStatus = async (orgId: string, status: 'approved' | 'rejected') => {
+  const handleOrgStatus = async (orgId: string, status: 'approved' | 'rejected' | 'suspended') => {
     setActionLoading(orgId + status);
     try {
       const { error } = await supabase.rpc('set_org_status', { p_org_id: orgId, p_status: status });
       if (error) throw error;
-      toast({ title: status === 'approved' ? 'Organization Approved' : 'Organization Rejected', description: `Status updated to ${status}.` });
+      const labels: Record<string, string> = { approved: 'Approved', rejected: 'Rejected', suspended: 'Suspended' };
+      toast({ title: `Organization ${labels[status]}`, description: `Status updated to ${status}.` });
       await loadData();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error', description: err.message });
@@ -239,6 +247,7 @@ export default function Platform() {
                   <th className="text-left px-6 py-3 font-bold text-muted-foreground uppercase tracking-widest text-[10px]">Organization</th>
                   <th className="text-left px-6 py-3 font-bold text-muted-foreground uppercase tracking-widest text-[10px]">Owner</th>
                   <th className="text-left px-6 py-3 font-bold text-muted-foreground uppercase tracking-widest text-[10px]">Plan</th>
+                  <th className="text-left px-6 py-3 font-bold text-muted-foreground uppercase tracking-widest text-[10px]">Status</th>
                   <th className="text-left px-6 py-3 font-bold text-muted-foreground uppercase tracking-widest text-[10px]">Users</th>
                   <th className="text-left px-6 py-3 font-bold text-muted-foreground uppercase tracking-widest text-[10px]">Created</th>
                   <th className="text-right px-6 py-3 font-bold text-muted-foreground uppercase tracking-widest text-[10px]">Actions</th>
@@ -272,6 +281,11 @@ export default function Platform() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
+                      <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-widest', STATUS_STYLES[org.status] || STATUS_STYLES.pending)}>
+                        {org.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
                       <span className="text-sm font-semibold text-foreground">{org.user_count}</span>
                     </td>
                     <td className="px-6 py-4 text-xs text-muted-foreground">
@@ -282,9 +296,31 @@ export default function Platform() {
                         <Button variant="ghost" size="icon" className="h-7 w-7 opacity-50 cursor-not-allowed" disabled title="View Details (coming soon)">
                           <Eye className="h-3.5 w-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-50 cursor-not-allowed" disabled title="Disable Org (coming soon)">
-                          <ToggleLeft className="h-3.5 w-3.5" />
-                        </Button>
+                        {org.status !== 'suspended' ? (
+                          <Button
+                            variant="ghost" size="icon"
+                            className="h-7 w-7 text-orange-500 hover:bg-orange-50"
+                            title="Suspend Organization"
+                            disabled={actionLoading === org.id + 'suspended'}
+                            onClick={() => handleOrgStatus(org.id, 'suspended')}
+                          >
+                            {actionLoading === org.id + 'suspended'
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <PauseCircle className="h-3.5 w-3.5" />}
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost" size="icon"
+                            className="h-7 w-7 text-emerald-500 hover:bg-emerald-50"
+                            title="Re-approve Organization"
+                            disabled={actionLoading === org.id + 'approved'}
+                            onClick={() => handleOrgStatus(org.id, 'approved')}
+                          >
+                            {actionLoading === org.id + 'approved'
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <CheckCircle2 className="h-3.5 w-3.5" />}
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
