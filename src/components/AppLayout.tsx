@@ -164,9 +164,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   : 'Team Member'
                 }
               </div>
-              <div className="mt-1 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 uppercase tracking-wider">
-                {planName}
-              </div>
+              {/* Plan badge — only visible to org owners, not clients or team members */}
+              {isOwner && (
+                <div className="mt-1 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 uppercase tracking-wider">
+                  {planName}
+                </div>
+              )}
             </div>
           )}
           {/* Upgrade CTA — only for business owners on free/pro plans */}
