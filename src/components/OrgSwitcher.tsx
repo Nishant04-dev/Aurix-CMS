@@ -37,6 +37,7 @@ export function OrgSwitcher() {
         console.warn('get_user_organizations:', error.message);
         return [];
       }
+      console.log('ALL ORGS:', data);
       return data || [];
     },
     staleTime: 60_000,
