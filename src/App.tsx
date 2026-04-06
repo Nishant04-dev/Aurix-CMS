@@ -72,7 +72,8 @@ function AppRoutes() {
   if (!user) return <Login />;
 
   // Only business users without an org need onboarding
-  if (!isPlatformOwner && accountType === 'business' && !orgId) return <Onboarding />;
+  // Never send platform owner or super_admin to onboarding
+  if (!isPlatformOwner && user.role !== 'super_admin' && accountType === 'business' && !orgId) return <Onboarding />;
 
   // Business users with an org that isn't approved yet → waiting page
   // Never block super_admin or platform owner

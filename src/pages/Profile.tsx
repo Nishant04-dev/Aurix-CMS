@@ -133,10 +133,13 @@ export default function Profile() {
   if (!user) return null;
 
   // For individual users, show "User" instead of any role label
-  const isIndividual = accountType === 'user';
-  const roleCfg = isIndividual
-    ? { label: 'User', color: 'bg-slate-100 text-slate-600 border-slate-200' }
-    : (ROLE_LABELS[user.role] ?? ROLE_LABELS.client);
+  // But never override super_admin or platform owner
+  const isIndividual = accountType === 'user' && !isPlatformOwner && user.role !== 'super_admin';
+  const roleCfg = isPlatformOwner || user.role === 'super_admin'
+    ? { label: 'Super Admin', color: 'bg-purple-100 text-purple-700 border-purple-200' }
+    : isIndividual
+      ? { label: 'User', color: 'bg-slate-100 text-slate-600 border-slate-200' }
+      : (ROLE_LABELS[user.role] ?? ROLE_LABELS.client);
   const initials = (user.name || user.email || '?').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
   const handleUpgradeToBusiness = async () => {

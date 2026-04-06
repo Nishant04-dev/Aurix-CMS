@@ -9,51 +9,51 @@ import { useAuth } from '@/contexts/AuthContext';
 
 // ── Clients ───────────────────────────────────────────────────
 export function useClients() {
-  const { user, orgId } = useAuth();
+  const { user, orgId, isPlatformOwner } = useAuth();
   return useQuery({
     queryKey: ['clients', orgId],
     queryFn: () => api.get<Client[]>('/clients'),
-    enabled: !!user && !!orgId && user.role !== 'client',
+    enabled: !!user && (!!orgId || isPlatformOwner) && user.role !== 'client',
   });
 }
 
 // ── Projects ──────────────────────────────────────────────────
 export function useProjects(clientId?: string) {
-  const { user, orgId } = useAuth();
+  const { user, orgId, isPlatformOwner } = useAuth();
   return useQuery({
     queryKey: ['projects', clientId, orgId],
     queryFn: () => api.get<Project[]>('/projects', clientId ? { client_id: clientId } : undefined),
-    enabled: !!user && !!orgId,
+    enabled: !!user && (!!orgId || isPlatformOwner),
   });
 }
 
 // ── Tasks ─────────────────────────────────────────────────────
 export function useTasks(projectId?: string) {
-  const { user, orgId } = useAuth();
+  const { user, orgId, isPlatformOwner } = useAuth();
   return useQuery({
     queryKey: ['tasks', projectId, orgId],
     queryFn: () => api.get<Task[]>('/tasks', projectId ? { project_id: projectId } : undefined),
-    enabled: !!user && !!orgId,
+    enabled: !!user && (!!orgId || isPlatformOwner),
   });
 }
 
 // ── Files ─────────────────────────────────────────────────────
 export function useFiles(projectId?: string) {
-  const { user, orgId } = useAuth();
+  const { user, orgId, isPlatformOwner } = useAuth();
   return useQuery({
     queryKey: ['files', projectId, orgId],
     queryFn: () => api.get<FileItem[]>('/files', projectId ? { project_id: projectId } : undefined),
-    enabled: !!user && !!orgId,
+    enabled: !!user && (!!orgId || isPlatformOwner),
   });
 }
 
 // ── Invoices ──────────────────────────────────────────────────
 export function useInvoices(clientId?: string) {
-  const { user, orgId } = useAuth();
+  const { user, orgId, isPlatformOwner } = useAuth();
   return useQuery({
     queryKey: ['invoices', clientId, orgId],
     queryFn: () => api.get<Invoice[]>('/invoices', clientId ? { client_id: clientId } : undefined),
-    enabled: !!user && !!orgId,
+    enabled: !!user && (!!orgId || isPlatformOwner),
   });
 }
 
@@ -69,11 +69,11 @@ export function useNotifications() {
 
 // ── Team Members ──────────────────────────────────────────────
 export function useTeamMembers() {
-  const { user, orgId } = useAuth();
+  const { user, orgId, isPlatformOwner } = useAuth();
   return useQuery({
     queryKey: ['team', orgId],
     queryFn: () => api.get<any[]>('/users'),
-    enabled: !!user && !!orgId && user.role !== 'client',
+    enabled: !!user && (!!orgId || isPlatformOwner) && user.role !== 'client',
   });
 }
 
@@ -174,7 +174,7 @@ export interface Role {
 }
 
 export function useRoles() {
-  const { user, orgId } = useAuth();
+  const { user, orgId, isPlatformOwner } = useAuth();
   return useQuery({
     queryKey: ['roles', orgId],
     queryFn: async () => {
@@ -188,7 +188,7 @@ export function useRoles() {
         createdAt: r.created_at,
       })) as Role[];
     },
-    enabled: !!user && !!orgId,
+    enabled: !!user && (!!orgId || isPlatformOwner),
     placeholderData: [],
   });
 }

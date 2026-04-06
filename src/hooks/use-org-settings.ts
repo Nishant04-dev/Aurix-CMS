@@ -17,13 +17,13 @@ export interface OrgSettings {
 }
 
 export function useOrgSettings() {
-  const { orgId } = useAuth();
+  const { orgId, isPlatformOwner } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ['org_settings', orgId],
     queryFn: () => api.get<OrgSettings>('/organizations'),
-    enabled: !!orgId,
+    enabled: !!orgId || isPlatformOwner,
     staleTime: 2 * 60 * 1000,
   });
 
