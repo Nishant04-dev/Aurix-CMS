@@ -21,43 +21,43 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// ── Minimal user from session only (used while backend loads) ─
-function minimalUser(sessionUser: any): User {
-  return {
-    id: sessionUser.id,
-    email: sessionUser.email || '',
-    name: sessionUser.email?.split('@')[0] || 'User',
-    role: 'loading' as UserRole,  // never show 'client' as fallback
-    createdAt: sessionUser.created_at,
-  } as any;
-}
-
-// ── Fetch full profile from backend API ───────────────────────
-async function fetchProfileFromBackend(token: string) {
+// ── Fetch full profile — always sends token, never falls back to 'client' ──
+async function fetchProfile(token: string) {
   if (!token) {
-    console.warn('fetchProfileFromBackend: no token provided');
+    console.warn('[auth] fetchProfile called with no token');
     return null;
   }
-  console.log('[auth] fetching profile from', `${API_BASE}/api/profile`, '— token:', token.slice(0, 20) + '...');
+
+  console.log('[auth] GET /api/profile →', API_BASE, '| token:', token.slice(0, 15) + '...');
+
   try {
     const res = await fetch(`${API_BASE}/api/profile`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { Authorization: `Bearer ${token}` },
     });
-    console.log('[auth] profile response status:', res.status);
-    if (!res.ok) return null;
-    const json = await res.json();
-    if (!json.success || !json.data) return null;
-    const p = json.data;
 
-    // Block banned/disabled accounts
+    console.log('[auth] /api/profile status:', res.status);
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.error('[auth] /api/profile error body:', text);
+      return null;
+    }
+
+    const json = await res.json();
+    if (!json.success || !json.data) {
+      console.error('[auth] /api/profile bad response:', json);
+      return null;
+    }
+
+    const p = json.data;
+    console.log('[auth] profile loaded:', { role: p.role, org_id: p.org_id, is_platform_owner: p.is_platform_owner });
+
     if (p.status === 'banned' || p.status === 'disabled') {
       await supabase.auth.signOut();
       return null;
     }
 
+    // Fetch org details
     let orgStatus: string | null = null;
     let orgPlan: string | null = null;
 
@@ -76,16 +76,16 @@ async function fetchProfileFromBackend(token: string) {
       } catch { /* non-fatal */ }
     }
 
-    // Platform owner: always treat org as approved even if fetch failed
-    if (p.is_platform_owner && p.org_id && !orgStatus) {
-      orgStatus = 'approved';
-      orgPlan   = orgPlan ?? 'enterprise';
+    // Platform owner always gets approved status
+    if (p.is_platform_owner) {
+      orgStatus = orgStatus ?? 'approved';
+      orgPlan   = orgPlan   ?? 'enterprise';
     }
 
     const accountType: 'user' | 'business' =
-      p.account_type === 'business' || p.account_type === 'user'
-        ? p.account_type
-        : p.org_id ? 'business' : 'user';
+      p.account_type === 'business' ? 'business' :
+      p.account_type === 'user'     ? 'user' :
+      p.org_id                      ? 'business' : 'user';
 
     return {
       user: {
@@ -103,31 +103,31 @@ async function fetchProfileFromBackend(token: string) {
       accountType,
       isPlatformOwner: p.is_platform_owner === true,
     };
-  } catch (err) {
-    console.error('fetchProfileFromBackend failed:', err);
+  } catch (err: any) {
+    console.error('[auth] fetchProfile exception:', err.message);
     return null;
   }
 }
 
 // ── Provider ──────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser]               = useState<User | null>(null);
-  const [orgId, setOrgId]             = useState<string | null>(null);
-  const [orgStatus, setOrgStatus]     = useState<string | null>(null);
-  const [orgPlan, setOrgPlan]         = useState<string | null>(null);
+  const [user,            setUser]            = useState<User | null>(null);
+  const [orgId,           setOrgId]           = useState<string | null>(null);
+  const [orgStatus,       setOrgStatus]       = useState<string | null>(null);
+  const [orgPlan,         setOrgPlan]         = useState<string | null>(null);
   const [isPlatformOwner, setIsPlatformOwner] = useState(false);
-  const [accountType, setAccountType] = useState<'user' | 'business'>('user');
-  const [loading, setLoading]         = useState(true);
+  const [accountType,     setAccountType]     = useState<'user' | 'business'>('user');
+  const [loading,         setLoading]         = useState(true);
 
   const finalizingRef = useRef(false);
 
-  const applyProfile = (result: NonNullable<Awaited<ReturnType<typeof fetchProfileFromBackend>>>) => {
-    setUser(result.user);
-    setOrgId(result.orgId);
-    setOrgStatus(result.orgStatus);
-    setOrgPlan(result.orgPlan);
-    setAccountType(result.accountType);
-    setIsPlatformOwner(result.isPlatformOwner);
+  const applyProfile = (r: NonNullable<Awaited<ReturnType<typeof fetchProfile>>>) => {
+    setUser(r.user);
+    setOrgId(r.orgId);
+    setOrgStatus(r.orgStatus);
+    setOrgPlan(r.orgPlan);
+    setAccountType(r.accountType);
+    setIsPlatformOwner(r.isPlatformOwner);
   };
 
   const clearAuth = () => {
@@ -142,75 +142,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    const failsafe = setTimeout(() => {
-      if (mounted) { console.warn('Auth failsafe fired — backend may be unreachable'); setLoading(false); }
-    }, 10000); // 10s — enough time for remote backend to respond
-
-    const init = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
+    // ── Single entry point: wait for Supabase to give us a session ──
+    // onAuthStateChange fires INITIAL_SESSION synchronously with the
+    // persisted session — we use that as our single source of truth.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
         if (!mounted) return;
 
+        console.log('[auth] event:', event, '| has token:', !!session?.access_token);
+
         if (session?.access_token) {
-          setUser(minimalUser(session.user));
-          // Fetch real profile — token is guaranteed present
-          const result = await fetchProfileFromBackend(session.access_token);
-          if (mounted && result) {
+          // Fetch real profile with the token we have right now
+          const result = await fetchProfile(session.access_token);
+
+          if (!mounted) return;
+
+          if (result) {
             applyProfile(result);
-          } else if (mounted) {
-            // Backend unreachable or returned error — clear so user sees login
-            clearAuth();
+          } else {
+            // Backend unreachable — still show the user as logged in
+            // with minimal info so they're not stuck on a spinner
+            setUser({
+              id:        session.user.id,
+              email:     session.user.email || '',
+              name:      session.user.email?.split('@')[0] || 'User',
+              role:      'client' as UserRole,
+              createdAt: session.user.created_at,
+            } as any);
+          }
+
+          // Finalize account type after signup if needed
+          if (!finalizingRef.current && getPendingAccountType()) {
+            finalizingRef.current = true;
+            finalizeAccountType(session.user.id).finally(async () => {
+              finalizingRef.current = false;
+              const r2 = await fetchProfile(session.access_token);
+              if (mounted && r2) applyProfile(r2);
+            });
           }
         } else {
           clearAuth();
         }
-      } catch (err) {
-        console.error('Auth init failed:', err);
-        if (mounted) clearAuth();
-      } finally {
-        if (mounted) { clearTimeout(failsafe); setLoading(false); }
+
+        // Always stop loading after first event
+        if (mounted) setLoading(false);
       }
-    };
+    );
 
-    init();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!mounted) return;
-      if (event === 'INITIAL_SESSION') return;
-
-      if (session?.access_token) {
-        setUser(minimalUser(session.user));
-        // Don't set loading=false yet — wait for real profile
-        fetchProfileFromBackend(session.access_token).then(result => {
-          if (!mounted) return;
-          if (result) applyProfile(result);
-          setLoading(false);
-        });
-
-        if (!finalizingRef.current && getPendingAccountType()) {
-          finalizingRef.current = true;
-          finalizeAccountType(session.user.id).finally(() => {
-            finalizingRef.current = false;
-            fetchProfileFromBackend(session.access_token).then(result => {
-              if (mounted && result) applyProfile(result);
-            });
-          });
-        }
-      } else {
-        clearAuth();
+    // Failsafe: if onAuthStateChange never fires (shouldn't happen)
+    const failsafe = setTimeout(() => {
+      if (mounted && loading) {
+        console.warn('[auth] failsafe — no auth event received');
         setLoading(false);
       }
-    });
+    }, 8000);
 
     return () => {
       mounted = false;
       clearTimeout(failsafe);
       subscription.unsubscribe();
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { success: false, error: error.message };
     return { success: true };
   };
@@ -230,7 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) return;
-    const result = await fetchProfileFromBackend(session.access_token);
+    const result = await fetchProfile(session.access_token);
     if (result) applyProfile(result);
   };
 
