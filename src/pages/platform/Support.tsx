@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,20 +56,22 @@ export default function PlatformSupport() {
   const sendReply = async () => {
     if (!reply.trim() || !selected) return;
     setSending(true);
-    const { error } = await supabase.from('support_messages').insert({
-      conversation_id: selected.id,
-      sender_id: user?.id,
-      message: reply.trim(),
-      is_platform: true,
-    });
-    if (error) toast({ variant: 'destructive', title: 'Error', description: error.message });
-    else { setReply(''); await loadMessages(selected.id); }
+    try {
+      await api.post('/platform/support/messages', { conversation_id: selected.id, message: reply.trim() });
+      setReply(''); await loadMessages(selected.id);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    }
     setSending(false);
   };
 
   const closeTicket = async () => {
-    const { error } = await supabase.from('support_conversations').update({ status: 'closed' }).eq('id', selected.id);
-    if (!error) { setSelected({ ...selected, status: 'closed' }); await loadConversations(); }
+    try {
+      await api.patch(`/platform/support/${selected.id}/close`);
+      setSelected({ ...selected, status: 'closed' }); await loadConversations();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    }
   };
 
   if (loading) return <div className="flex h-40 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary/40" /></div>;

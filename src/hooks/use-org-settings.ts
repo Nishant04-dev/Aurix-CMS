@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface OrgSettings {
@@ -22,29 +22,14 @@ export function useOrgSettings() {
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ['org_settings', orgId],
-    queryFn: async (): Promise<OrgSettings | null> => {
-      if (!orgId) return null;
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('id, name, logo_url, website, gst_number, address, phone, currency, timezone, plan, status')
-        .eq('id', orgId)
-        .single();
-      if (error) throw error;
-      return data as OrgSettings;
-    },
+    queryFn: () => api.get<OrgSettings>('/organizations'),
     enabled: !!orgId,
     staleTime: 2 * 60 * 1000,
   });
 
   const updateSettings = useMutation({
-    mutationFn: async (updates: Partial<Omit<OrgSettings, 'id' | 'plan' | 'status'>>) => {
-      if (!orgId) throw new Error('No org');
-      const { error } = await supabase
-        .from('organizations')
-        .update(updates)
-        .eq('id', orgId);
-      if (error) throw new Error(error.message);
-    },
+    mutationFn: (updates: Partial<Omit<OrgSettings, 'id' | 'plan' | 'status'>>) =>
+      api.patch('/organizations', updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['org_settings', orgId] });
       queryClient.invalidateQueries({ queryKey: ['org_currency', orgId] });

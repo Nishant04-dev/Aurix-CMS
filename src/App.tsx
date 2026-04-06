@@ -55,6 +55,7 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   const { user, orgId, orgStatus, isPlatformOwner, accountType, loading } = useAuth();
+  const { can, isAdmin, isClient: isClientRole } = usePermissions();
 
   if (loading) {
     return (
@@ -69,18 +70,11 @@ function AppRoutes() {
 
   if (!user) return <Login />;
 
-  // Debug — remove once confirmed working
-  console.log('AUTH STATE:', { accountType, orgId, orgStatus, isPlatformOwner });
-
   // Only business users without an org need onboarding
-  // Individual ("user") accounts go straight to dashboard
-  // Platform owners bypass everything
   if (!isPlatformOwner && accountType === 'business' && !orgId) return <Onboarding />;
 
   // Business users with an org that isn't approved yet → waiting page
   if (accountType === 'business' && orgId && !isPlatformOwner && orgStatus !== 'approved') return <WaitingApproval />;
-
-  const { can, isAdmin, isManager, isStaff, isClient: isClientRole } = usePermissions();
 
   return (
     <AppLayout>

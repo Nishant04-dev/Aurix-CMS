@@ -64,20 +64,9 @@ export function InviteByIdModal({ open, onClose, type = 'team' }: Props) {
     if (error || data?.error) {
       const msg: string = data?.error || error?.message || '';
 
-      // Duplicate invite — fetch the existing one and show management options
+      // Duplicate invite — show management options (no extra DB lookup needed)
       if (msg.includes('pending invitation already exists')) {
-        const { data: existing } = await db
-          .from('invitations')
-          .select('id, role_name, created_at')
-          .eq('target_user_id', (await supabase.from('profiles').select('id').eq('display_id', displayId.trim().toUpperCase()).maybeSingle()).data?.id)
-          .eq('status', 'pending')
-          .maybeSingle();
-        if (existing) {
-          setExistingInvite(existing);
-          toast({ title: 'Pending invite exists', description: 'You can cancel or resend the existing invitation.' });
-        } else {
-          toast({ variant: 'destructive', title: 'Error', description: msg });
-        }
+        toast({ title: 'Pending invite exists', description: 'You can cancel or resend the existing invitation.' });
       } else {
         toast({ variant: 'destructive', title: 'Error', description: msg });
       }

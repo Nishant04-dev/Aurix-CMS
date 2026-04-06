@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -69,15 +69,11 @@ export default function PlatformOverview() {
   useEffect(() => {
     const load = async () => {
       const [statsRes, logsRes] = await Promise.all([
-        supabase.rpc('get_platform_stats'),
-        (supabase as any)
-          .from('audit_logs')
-          .select('id, action, user_id, created_at, entity, metadata')
-          .order('created_at', { ascending: false })
-          .limit(10),
+        api.get('/platform/stats'),
+        api.get('/platform/audit-logs'),
       ]);
-      if (statsRes.data) setStats(statsRes.data as PlatformStats);
-      if (logsRes.data)  setLogs(logsRes.data);
+      setStats(statsRes as PlatformStats);
+      setLogs(logsRes);
       setLoading(false);
     };
     load();

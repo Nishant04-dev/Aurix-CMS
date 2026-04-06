@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface PlatformRole {
@@ -15,38 +15,7 @@ export function usePlatformPermissions() {
     queryKey: ['platform_permissions', user?.id],
     queryFn: async () => {
       if (!user) return { permissions: [] as string[], role: null as PlatformRole | null, power: 0 };
-
-      const { data: userRoles } = await supabase
-        .from('platform_user_roles')
-        .select('role_id, platform_roles(id, name, power_level)')
-        .eq('user_id', user.id);
-
-      if (!userRoles || userRoles.length === 0) {
-        return { permissions: [] as string[], role: null as PlatformRole | null, power: 0 };
-      }
-
-      // Get highest power role
-      const topRole = userRoles.reduce((best: any, cur: any) => {
-        const curPower = (cur.platform_roles as any)?.power_level ?? 0;
-        const bestPower = (best?.platform_roles as any)?.power_level ?? 0;
-        return curPower > bestPower ? cur : best;
-      }, userRoles[0]);
-
-      const roleObj = topRole?.platform_roles as any;
-      const role: PlatformRole = roleObj
-        ? { id: roleObj.id, name: roleObj.name, powerLevel: roleObj.power_level }
-        : { id: '', name: '', powerLevel: 0 };
-
-      // Get all permissions across all roles
-      const roleIds = userRoles.map((r: any) => r.role_id);
-      const { data: perms } = await supabase
-        .from('platform_role_permissions')
-        .select('permission_key')
-        .in('role_id', roleIds);
-
-      const permissions = (perms || []).map((p: any) => p.permission_key);
-
-      return { permissions, role, power: role.powerLevel };
+      return await api.get('/platform/permissions');
     },
     enabled: !!user,
     staleTime: 2 * 60 * 1000,

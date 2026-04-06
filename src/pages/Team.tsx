@@ -34,7 +34,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { InviteByIdModal } from '@/components/InviteByIdModal';
 
 const roleStyles: Record<string, { bg: string; text: string; icon: any }> = {
@@ -100,10 +100,8 @@ export default function Team() {
     const err = validateRoleChange(selectedMember.id, selectedMember.role, roleData);
     if (err) { toast({ variant: 'destructive', title: 'Not Allowed', description: err }); return; }
     try {
-      const { data, error } = await supabase.rpc('safe_change_role', {
-        target_user_id: selectedMember.id, new_role: roleData,
-      });
-      if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message);
+      const data = await api.post<any>(`/users/${selectedMember.id}/role`, { role: roleData });
+      if (data?.error) throw new Error(data.error);
       toast({ title: 'Role changed', description: `Role updated to ${roleData}` });
       setIsChangingRole(false);
       refetch();

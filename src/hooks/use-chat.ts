@@ -1,24 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { API_BASE } from '@/lib/apiUrl';
-
-const API = API_BASE;
-
-async function authFetch(path: string, options: RequestInit = {}) {
-  const { data: { session } } = await supabase.auth.getSession();
-  const res = await fetch(`${API}/api${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session?.access_token ?? ''}`,
-      ...(options.headers || {}),
-    },
-  });
-  const json = await res.json();
-  if (!res.ok || !json.success) throw new Error(json.error || 'Request failed');
-  return json.data;
-}
+import { api } from '@/lib/apiClient';
 
 export interface Channel {
   id: string;
@@ -42,7 +25,7 @@ export interface ChatMessage {
 export function useChannels() {
   return useQuery<Channel[]>({
     queryKey: ['chat-channels'],
-    queryFn: () => authFetch('/chat/channels'),
+    queryFn: () => api.get<Channel[]>('/chat/channels'),
     placeholderData: [],
   });
 }
@@ -50,7 +33,7 @@ export function useChannels() {
 export function useMessages(channelId: string | null) {
   return useQuery<ChatMessage[]>({
     queryKey: ['chat-messages', channelId],
-    queryFn: () => authFetch(`/chat/channels/${channelId}/messages`),
+    queryFn: () => api.get<ChatMessage[]>(`/chat/channels/${channelId}/messages`),
     enabled: !!channelId,
     placeholderData: [],
   });
@@ -60,7 +43,7 @@ export function useSendMessage() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ channelId, content }: { channelId: string; content: string }) =>
-      authFetch('/chat/messages', { method: 'POST', body: JSON.stringify({ channel_id: channelId, content }) }),
+      api.post('/chat/messages', { channel_id: channelId, content }),
     onSuccess: (_, { channelId }) => {
       queryClient.invalidateQueries({ queryKey: ['chat-messages', channelId] });
     },
@@ -70,8 +53,7 @@ export function useSendMessage() {
 export function useCreateChannel() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) =>
-      authFetch('/chat/channels', { method: 'POST', body: JSON.stringify({ name }) }),
+    mutationFn: (name: string) => api.post('/chat/channels', { name }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['chat-channels'] }),
   });
 }
@@ -79,8 +61,7 @@ export function useCreateChannel() {
 export function useDeleteChannel() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (channelId: string) =>
-      authFetch(`/chat/channels/${channelId}`, { method: 'DELETE' }),
+    mutationFn: (channelId: string) => api.delete(`/chat/channels/${channelId}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['chat-channels'] }),
   });
 }

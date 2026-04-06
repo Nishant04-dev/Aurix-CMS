@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Loader2, Zap } from 'lucide-react';
@@ -13,20 +13,19 @@ export default function PlatformFeatures() {
   const { toast } = useToast();
 
   useEffect(() => {
-    supabase.from('feature_flags').select('*').order('key').then(({ data }) => {
+    api.get('/platform/feature-flags').then((data) => {
       setFlags(data || []);
       setLoading(false);
     });
   }, []);
 
   const toggle = async (id: string, enabled: boolean) => {
-    const { error } = await supabase.from('feature_flags')
-      .update({ enabled, updated_at: new Date().toISOString(), updated_by: user?.id })
-      .eq('id', id);
-    if (error) toast({ variant: 'destructive', title: 'Error', description: error.message });
-    else {
+    try {
+      await api.patch(`/platform/feature-flags/${id}`, { enabled });
       setFlags(prev => prev.map(f => f.id === id ? { ...f, enabled } : f));
       toast({ title: 'Feature flag updated' });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
     }
   };
 

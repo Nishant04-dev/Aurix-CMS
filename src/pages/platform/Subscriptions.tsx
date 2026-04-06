@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, CreditCard } from 'lucide-react';
@@ -71,8 +71,7 @@ export default function PlatformSubscriptions() {
     const key = subId + status;
     setActionId(key);
     try {
-      const { error } = await supabase.from('subscriptions').update({ status }).eq('id', subId);
-      if (error) throw error;
+      await api.patch(`/platform/subscriptions/${subId}`, { status });
       toast({ title: 'Status updated', description: `Subscription ${status}` });
       await load();
     } catch (err: any) {

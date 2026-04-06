@@ -1,4 +1,8 @@
-import { supabase } from '@/integrations/supabase/client';
+/**
+ * Fire-and-forget audit logger.
+ * Sends to backend which writes via service role — never directly to DB.
+ */
+import { api } from '@/lib/apiClient';
 
 export interface AuditLogParams {
   orgId?: string | null;
@@ -9,29 +13,10 @@ export interface AuditLogParams {
   metadata?: Record<string, unknown>;
 }
 
-/**
- * Fire-and-forget audit logger.
- * Never throws — errors are swallowed so they never break the calling flow.
- */
-export async function logAudit({
-  orgId,
-  userId,
-  action,
-  entity,
-  entityId,
-  metadata = {},
-}: AuditLogParams): Promise<void> {
+export async function logAudit(params: AuditLogParams): Promise<void> {
   try {
-    await (supabase as any).from('audit_logs').insert({
-      org_id:    orgId    || null,
-      actor_id:  userId   || null,
-      user_id:   userId   || null,
-      action,
-      entity:    entity   || null,
-      entity_id: entityId || null,
-      metadata,
-    });
+    await api.post('/audit-logs', params);
   } catch (err) {
-    console.warn('[auditLog] Failed to write audit log:', action, err);
+    console.warn('[auditLog] Failed to write audit log:', params.action, err);
   }
 }

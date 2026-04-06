@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -106,8 +107,8 @@ export default function Projects() {
       return;
     }
     try {
-      const { error } = await supabase.from('projects').update({ status }).eq('id', id);
-      if (error) throw error;
+      const { error } = await api.patch(`/projects/${id}`, { status }) as any;
+      if (error) throw new Error(error);
       toast({ title: 'Status Updated', description: `Project is now ${statusLabels[status]}.` });
       refetch();
     } catch (err: any) {
@@ -127,7 +128,7 @@ export default function Projects() {
       });
       
       // Update project status to approval_pending
-      await supabase.from('projects').update({ status: 'approval_pending' as ProjectStatus }).eq('id', approvalRequest.projectId);
+      await api.patch(`/projects/${approvalRequest.projectId}`, { status: 'approval_pending' });
       
       toast({ title: 'Approval Requested', description: 'Your change request has been submitted for approval.' });
       setApprovalRequest(null);

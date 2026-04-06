@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Navigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import {
   Plus, Edit2, Trash2, Shield, Lock, Loader2, AlertTriangle, ShieldCheck,
 } from 'lucide-react';
@@ -88,12 +87,8 @@ export default function Roles() {
   };
 
   const openEdit = async (role: Role) => {
-    // Load current role_permissions from DB
-    const { data } = await supabase
-      .from('role_permissions')
-      .select('permission_key')
-      .eq('role_id', role.id);
-    const dbPerms = Object.fromEntries((data || []).map((r: any) => [r.permission_key, true]));
+    // Use included role_permissions from the role object
+    const dbPerms = Object.fromEntries((role.role_permissions || []).map((r: any) => [r.permission_key, true]));
     // Merge with JSONB permissions
     const merged = { ...role.permissions, ...dbPerms };
     setForm({ name: role.name, powerLevel: role.powerLevel, permissions: merged });
@@ -104,16 +99,8 @@ export default function Roles() {
     setForm(f => ({ ...f, permissions: { ...f.permissions, [key]: !f.permissions[key] } }));
   };
 
-  const syncRolePermissions = async (roleId: string, permissions: Record<string, boolean>) => {
-    // Delete existing
-    await supabase.from('role_permissions').delete().eq('role_id', roleId);
-    // Insert new ones
-    const keys = Object.entries(permissions).filter(([, v]) => v).map(([k]) => k);
-    if (keys.length > 0) {
-      await supabase.from('role_permissions').insert(
-        keys.map(key => ({ role_id: roleId, permission_key: key }))
-      );
-    }
+  const syncRolePermissions = (_roleId: string, _permissions: Record<string, boolean>) => {
+    // Permissions are now handled by the backend on create/update
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -124,16 +111,9 @@ export default function Roles() {
       return;
     }
     try {
-      await createRole.mutateAsync(form);
-      // Get the newly created role to sync permissions
-      const { data: newRole } = await supabase
-        .from('roles')
-        .select('id')
-        .eq('name', form.name)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-      if (newRole) await syncRolePermissions(newRole.id, form.permissions);
+      // Pass permissions as array of enabled keys — backend handles role_permissions
+      const permKeys = Object.entries(form.permissions).filter(([, v]) => v).map(([k]) => k);
+      await createRole.mutateAsync({ ...form, permissions: permKeys as any });
       toast({ title: 'Role Created', description: `"${form.name}" has been created.` });
       setShowCreate(false);
     } catch (err: any) {

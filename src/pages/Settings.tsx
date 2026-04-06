@@ -103,9 +103,12 @@ function OrgSettingsForm() {
     try {
       const ext = file.name.split('.').pop();
       const path = `${orgId}/logo.${ext}`;
-      const { error: uploadError } = await supabase.storage.from('org-logos').upload(path, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: { publicUrl } } = supabase.storage.from('org-logos').getPublicUrl(path);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'org-logos');
+      formData.append('path', path);
+      await api.upload('/storage/upload', formData);
+      const { publicUrl } = await api.get<{ publicUrl: string }>('/storage/public-url', { bucket: 'org-logos', path });
       setForm(f => ({ ...f, logo_url: publicUrl }));
       setLogoPreview(publicUrl);
       toast({ title: 'Logo uploaded', description: 'Save settings to apply.' });

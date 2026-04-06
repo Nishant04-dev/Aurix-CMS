@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/hooks/use-toast';
 
 const statusConfig: Record<TaskStatus, { icon: React.ElementType; label: string; style: string, badge: string }> = {
@@ -57,9 +58,7 @@ export default function Tasks() {
   const updateTaskStatus = async (id: string, status: TaskStatus) => {
     try {
       setLocalTasks(prev => prev.map(t => t.id === id ? { ...t, status } : t));
-      
-      const { error } = await supabase.from('tasks').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
-      if (error) throw error;
+      await api.patch(`/tasks/${id}`, { status });
       toast({ title: 'Task Updated', description: `Status changed to ${statusConfig[status].label}` });
       refetch();
     } catch (err: any) {
@@ -71,10 +70,7 @@ export default function Tasks() {
   const deleteTask = async (id: string) => {
     try {
       setLocalTasks(prev => prev.filter(t => t.id !== id));
-      
-      const { error } = await supabase.from('tasks').delete().eq('id', id);
-      if (error) throw error;
-      
+      await api.delete(`/tasks/${id}`);
       toast({ title: 'Task Deleted', description: 'Task has been removed' });
       refetch();
     } catch (err: any) {

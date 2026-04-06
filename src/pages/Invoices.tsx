@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -65,8 +66,7 @@ export default function Invoices() {
 
   const updateStatus = async (id: string, status: InvoiceStatus) => {
     try {
-      const { error } = await supabase.from('invoices').update({ status }).eq('id', id);
-      if (error) throw error;
+      await api.patch(`/invoices/${id}`, { status });
       toast({ title: 'Status Updated', description: `Invoice is now ${statusStyles[status].text}.` });
       refetch();
     } catch (err: any) {

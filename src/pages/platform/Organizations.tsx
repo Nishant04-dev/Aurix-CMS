@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,12 +26,21 @@ export default function PlatformOrganizations() {
   const { toast } = useToast();
 
   const load = async () => {
-    const { data } = await supabase.rpc('get_all_organizations');
+    const data = await api.get('/platform/organizations');
     setOrgs(data || []);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  const setStatus = async (id: string, status: string) => {
+    setActionId(id + status);
+    try {
+      await api.post('/platform/organizations/status', { orgId: id, status });
+      toast({ title: 'Updated', description: `Organization ${status}` }); await load();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    }
+    setActionId(null);
+  };
 
   const setStatus = async (id: string, status: string) => {
     setActionId(id + status);

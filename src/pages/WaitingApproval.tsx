@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { Button } from '@/components/ui/button';
 import { Clock, CheckCircle2, XCircle, Loader2, RefreshCw, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -13,17 +13,10 @@ export default function WaitingApproval() {
 
   useEffect(() => {
     if (!orgId) return;
-    supabase
-      .from('organizations')
-      .select('name, created_at')
-      .eq('id', orgId)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setOrgName((data as any).name);
-          setOrgCreatedAt((data as any).created_at);
-        }
-      });
+    api.get('/organizations').then((data) => {
+      setOrgName(data.name);
+      setOrgCreatedAt(data.created_at);
+    });
   }, [orgId]);
 
   const handleRefresh = async () => {

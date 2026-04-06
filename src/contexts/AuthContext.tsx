@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import type { User, UserRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { finalizeAccountType, getPendingAccountType } from '@/lib/accountTypeSetup';
+import { API_BASE } from '@/lib/apiUrl';
 
 interface AuthContextType {
   user: User | null;
@@ -20,7 +21,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// ── Minimal user from session only — no DB needed ────────────────────────────
+// ── Minimal user from session only ───────────────────────────
 function minimalUser(sessionUser: any): User {
   return {
     id: sessionUser.id,
@@ -31,113 +32,69 @@ function minimalUser(sessionUser: any): User {
   } as any;
 }
 
-// ── Full profile fetch — never throws ────────────────────────────────────────
-async function fetchProfile(sessionUser: any) {
+// ── Fetch full profile from backend API ───────────────────────
+async function fetchProfileFromBackend(token: string) {
   try {
-    const { data: p } = await supabase
-      .from('profiles')
-      .select('id, name, email, role, org_id, account_type, is_platform_owner, display_id, avatar_url, status')
-      .eq('id', sessionUser.id)
-      .maybeSingle();
+    const res = await fetch(`${API_BASE}/api/profile`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json.success || !json.data) return null;
+    const p = json.data;
 
     // Block banned/disabled accounts
-    if ((p as any)?.status === 'banned' || (p as any)?.status === 'disabled') {
+    if (p.status === 'banned' || p.status === 'disabled') {
       await supabase.auth.signOut();
       return null;
     }
 
-    let resolvedOrgId: string | null = (p as any)?.org_id || null;
-
-    // Auto-initialize: if org_id is null but user owns orgs, set to first owned org
-    if (!resolvedOrgId) {
-      try {
-        const { data: ownedOrg } = await (supabase as any)
-          .from('organizations')
-          .select('id')
-          .eq('owner_id', sessionUser.id)
-          .limit(1)
-          .maybeSingle();
-        if (ownedOrg?.id) {
-          resolvedOrgId = ownedOrg.id;
-          // Persist so next load is instant
-          await (supabase as any)
-            .from('profiles')
-            .update({ org_id: ownedOrg.id, role: 'super_admin', account_type: 'business', power_level: 100 })
-            .eq('id', sessionUser.id);
-        }
-      } catch { /* ignore */ }
-    }
-    const rawType = (p as any)?.account_type;
-    const accountType: 'user' | 'business' =
-      rawType === 'business' || rawType === 'user'
-        ? rawType
-        : resolvedOrgId ? 'business' : 'user';
-
-    // Fetch org status separately — non-blocking, non-throwing
     let orgStatus: string | null = null;
     let orgPlan: string | null = null;
-    if (resolvedOrgId) {
+
+    if (p.org_id) {
       try {
-        const { data: orgData } = await (supabase as any)
-          .from('organizations')
-          .select('status, plan')
-          .eq('id', resolvedOrgId)
-          .maybeSingle();
-        orgStatus = orgData?.status ?? null;
-        orgPlan   = orgData?.plan   ?? 'free';
-
-        // If current org is rejected/suspended, auto-switch to another approved org
-        if (orgStatus === 'rejected' || orgStatus === 'suspended') {
-          const { data: nextOrg } = await (supabase as any)
-            .from('organizations')
-            .select('id, status, plan')
-            .eq('owner_id', sessionUser.id)
-            .eq('status', 'approved')
-            .neq('id', resolvedOrgId)
-            .limit(1)
-            .maybeSingle();
-
-          if (nextOrg?.id) {
-            resolvedOrgId = nextOrg.id;
-            orgStatus = nextOrg.status;
-            orgPlan = nextOrg.plan ?? 'free';
-            await (supabase as any)
-              .from('profiles')
-              .update({ org_id: nextOrg.id })
-              .eq('id', sessionUser.id);
-          } else {
-            // No approved org — clear org context
-            resolvedOrgId = null;
-            orgStatus = null;
-            orgPlan = null;
+        const orgRes = await fetch(`${API_BASE}/api/organizations`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (orgRes.ok) {
+          const orgJson = await orgRes.json();
+          if (orgJson.success && orgJson.data) {
+            orgStatus = orgJson.data.status ?? null;
+            orgPlan   = orgJson.data.plan   ?? 'free';
           }
         }
-      } catch { /* ignore */ }
+      } catch { /* non-fatal */ }
     }
+
+    const accountType: 'user' | 'business' =
+      p.account_type === 'business' || p.account_type === 'user'
+        ? p.account_type
+        : p.org_id ? 'business' : 'user';
 
     return {
       user: {
-        id: sessionUser.id,
-        email: sessionUser.email || '',
-        name: (p as any)?.name || sessionUser.email?.split('@')[0] || 'User',
-        role: ((p as any)?.role || 'client') as UserRole,
-        avatar: (p as any)?.avatar_url,
-        createdAt: sessionUser.created_at,
-        ...((p as any)?.display_id ? { display_id: (p as any).display_id } : {}),
+        id:        p.id,
+        email:     p.email || '',
+        name:      p.name  || p.email?.split('@')[0] || 'User',
+        role:      (p.role || 'client') as UserRole,
+        avatar:    p.avatar_url,
+        createdAt: p.created_at,
+        ...(p.display_id ? { display_id: p.display_id } : {}),
       } as any as User,
-      orgId: resolvedOrgId,
+      orgId:          p.org_id ?? null,
       orgStatus,
       orgPlan,
       accountType,
-      isPlatformOwner: (p as any)?.is_platform_owner === true,
+      isPlatformOwner: p.is_platform_owner === true,
     };
   } catch (err) {
-    console.error('fetchProfile failed:', err);
+    console.error('fetchProfileFromBackend failed:', err);
     return null;
   }
 }
 
-// ── Provider ──────────────────────────────────────────────────────────────────
+// ── Provider ──────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]               = useState<User | null>(null);
   const [orgId, setOrgId]             = useState<string | null>(null);
@@ -149,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const finalizingRef = useRef(false);
 
-  const applyProfile = (result: NonNullable<Awaited<ReturnType<typeof fetchProfile>>>) => {
+  const applyProfile = (result: NonNullable<Awaited<ReturnType<typeof fetchProfileFromBackend>>>) => {
     setUser(result.user);
     setOrgId(result.orgId);
     setOrgStatus(result.orgStatus);
@@ -170,12 +127,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    // Absolute failsafe — 4s max
     const failsafe = setTimeout(() => {
-      if (mounted) {
-        console.warn('Auth failsafe fired');
-        setLoading(false);
-      }
+      if (mounted) { console.warn('Auth failsafe fired'); setLoading(false); }
     }, 4000);
 
     const init = async () => {
@@ -184,10 +137,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mounted) return;
 
         if (session?.user) {
-          // Set minimal user immediately so loading=false doesn't show login screen
           setUser(minimalUser(session.user));
-          // Enrich in background — don't block loading
-          fetchProfile(session.user).then(result => {
+          fetchProfileFromBackend(session.access_token).then(result => {
             if (mounted && result) applyProfile(result);
           });
         } else {
@@ -197,10 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error('Auth init failed:', err);
         if (mounted) clearAuth();
       } finally {
-        if (mounted) {
-          clearTimeout(failsafe);
-          setLoading(false);
-        }
+        if (mounted) { clearTimeout(failsafe); setLoading(false); }
       }
     };
 
@@ -211,22 +159,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === 'INITIAL_SESSION') return;
 
       if (session?.user) {
-        // Set minimal user immediately — unblocks the UI right away
         setUser(minimalUser(session.user));
         setLoading(false);
 
-        // Enrich profile in background
-        fetchProfile(session.user).then(result => {
+        fetchProfileFromBackend(session.access_token).then(result => {
           if (mounted && result) applyProfile(result);
         });
 
-        // Finalize pending account_type in background (signup flow)
         if (!finalizingRef.current && getPendingAccountType()) {
           finalizingRef.current = true;
           finalizeAccountType(session.user.id).finally(() => {
             finalizingRef.current = false;
-            // Re-fetch profile after finalization so account_type is correct
-            fetchProfile(session.user).then(result => {
+            fetchProfileFromBackend(session.access_token).then(result => {
               if (mounted && result) applyProfile(result);
             });
           });
@@ -246,7 +190,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    console.log('Login:', { userId: data?.user?.id, error: error?.message });
     if (error) return { success: false, error: error.message };
     return { success: true };
   };
@@ -265,18 +208,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return;
-    const result = await fetchProfile(session.user);
+    if (!session?.access_token) return;
+    const result = await fetchProfileFromBackend(session.access_token);
     if (result) applyProfile(result);
   };
 
   const upgradeToBusinessAccount = async () => {
     if (!user) return;
     try {
-      await (supabase as any)
-        .from('profiles')
-        .update({ account_type: 'business' })
-        .eq('id', user.id);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        await fetch(`${API_BASE}/api/profile`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ account_type: 'business' }),
+        });
+      }
     } catch (err) {
       console.error('upgradeToBusinessAccount failed:', err);
     }

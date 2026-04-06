@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -74,13 +74,11 @@ export default function Platform() {
   const loadData = async () => {
     try {
       const [orgsRes, statsRes] = await Promise.all([
-        supabase.rpc('get_all_organizations'),
-        supabase.rpc('get_platform_stats'),
+        api.get('/platform/organizations'),
+        api.get('/platform/stats'),
       ]);
-      if (orgsRes.error) throw orgsRes.error;
-      if (statsRes.error) throw statsRes.error;
-      setOrgs(orgsRes.data || []);
-      const s = statsRes.data as any;
+      setOrgs(orgsRes || []);
+      const s = statsRes as any;
       setStats({
         total_orgs:    s?.total_orgs    ?? 0,
         total_users:   s?.total_users   ?? 0,
@@ -99,8 +97,7 @@ export default function Platform() {
   const handleOrgStatus = async (orgId: string, status: 'approved' | 'rejected' | 'suspended') => {
     setActionLoading(orgId + status);
     try {
-      const { error } = await supabase.rpc('set_org_status', { p_org_id: orgId, p_status: status });
-      if (error) throw error;
+      await api.post('/platform/organizations/status', { orgId, status });
       const labels: Record<string, string> = { approved: 'Approved', rejected: 'Rejected', suspended: 'Suspended' };
       toast({ title: `Organization ${labels[status]}`, description: `Status updated to ${status}.` });
       await loadData();

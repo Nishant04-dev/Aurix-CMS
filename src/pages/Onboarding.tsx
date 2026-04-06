@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,11 +58,7 @@ export default function Onboarding() {
     setError('');
 
     try {
-      const { error: rpcError } = await supabase.rpc('provision_new_organization', {
-        p_org_name: orgName.trim(),
-        p_user_id: user.id,
-      });
-      if (rpcError) throw rpcError;
+      await api.post('/onboarding/provision', { org_name: orgName.trim() });
 
       setSuccess(true);
       toast({ title: 'Workspace created!', description: `Welcome to ${orgName}.` });

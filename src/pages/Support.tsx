@@ -31,21 +31,13 @@ export default function Support() {
 
   const loadConversations = async () => {
     if (!orgId) return;
-    const { data } = await supabase
-      .from('support_conversations')
-      .select('*')
-      .eq('org_id', orgId)
-      .order('updated_at', { ascending: false });
+    const data = await api.get('/support/conversations');
     setConversations(data || []);
     setLoading(false);
   };
 
   const loadMessages = async (convId: string) => {
-    const { data, error } = await supabase
-      .from('support_messages')
-      .select('*')
-      .eq('conversation_id', convId)
-      .order('created_at', { ascending: true });
+    const data = await api.get('/platform/support/messages', { conversation_id: convId });
     setMessages(data || []);
     setTimeout(() => scrollRef.current?.scrollTo({ top: 9999, behavior: 'smooth' }), 100);
   };
@@ -68,29 +60,27 @@ export default function Support() {
   const createTicket = async () => {
     if (!subject.trim() || !firstMsg.trim() || !orgId) return;
     setSending(true);
-    const { data: conv, error: convErr } = await supabase
-      .from('support_conversations')
-      .insert({ org_id: orgId, created_by: user?.id, subject: subject.trim() })
-      .select().single();
-    if (convErr) { toast({ variant: 'destructive', title: 'Error', description: convErr.message }); setSending(false); return; }
-    await supabase.from('support_messages').insert({
-      conversation_id: conv.id, sender_id: user?.id, message: firstMsg.trim(), is_platform: false,
-    });
-    toast({ title: 'Ticket created', description: 'Our team will respond shortly.' });
-    setShowNew(false); setSubject(''); setFirstMsg('');
-    await loadConversations();
-    setSelected(conv);
+    try {
+      const conv = await api.post('/platform/support', { subject: subject.trim(), message: firstMsg.trim() });
+      toast({ title: 'Ticket created', description: 'Our team will respond shortly.' });
+      setShowNew(false); setSubject(''); setFirstMsg('');
+      await loadConversations();
+      setSelected(conv);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    }
     setSending(false);
   };
 
   const sendMessage = async () => {
     if (!newMsg.trim() || !selected) return;
     setSending(true);
-    const { error } = await supabase.from('support_messages').insert({
-      conversation_id: selected.id, sender_id: user?.id, message: newMsg.trim(), is_platform: false,
-    });
-    if (error) toast({ variant: 'destructive', title: 'Error', description: error.message });
-    else { setNewMsg(''); await loadMessages(selected.id); }
+    try {
+      await api.post('/platform/support/messages', { conversation_id: selected.id, message: newMsg.trim() });
+      setNewMsg(''); await loadMessages(selected.id);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    }
     setSending(false);
   };
 

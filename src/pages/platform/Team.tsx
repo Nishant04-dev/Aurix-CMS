@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,12 +24,9 @@ export default function PlatformTeam() {
   const { toast } = useToast();
 
   const load = async () => {
-    const [membersRes, rolesRes] = await Promise.all([
-      supabase.from('platform_user_roles').select('*, platform_roles(id,name,power_level), profiles(id,name,email)'),
-      supabase.from('platform_roles').select('*').order('power_level', { ascending: false }),
-    ]);
-    setMembers(membersRes.data || []);
-    setRoles(rolesRes.data || []);
+    const { members, roles } = await api.get('/platform/team');
+    setMembers(members || []);
+    setRoles(roles || []);
     setLoading(false);
   };
 
@@ -37,32 +34,24 @@ export default function PlatformTeam() {
 
   const addMember = async () => {
     if (!displayId.trim() || !selectedRole) return;
-    // Find user by AURIX display_id
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, name, email')
-      .eq('display_id', displayId.trim().toUpperCase())
-      .maybeSingle();
-    if (!profile) { toast({ variant: 'destructive', title: 'User not found', description: 'No user with that AURIX ID.' }); return; }
-
-    // Check for existing platform role
-    const { data: existing } = await supabase
-      .from('platform_user_roles')
-      .select('id')
-      .eq('user_id', profile.id)
-      .maybeSingle();
-    if (existing) { toast({ variant: 'destructive', title: 'Already a member', description: 'This user already has a platform role.' }); return; }
-
-    const { error } = await supabase.from('platform_user_roles').insert({ user_id: profile.id, role_id: selectedRole });
-    if (error) toast({ variant: 'destructive', title: 'Error', description: error.message });
-    else { toast({ title: 'Member added', description: `${profile.name || profile.email} added to platform team.` }); setShowAdd(false); setDisplayId(''); setSelectedRole(''); await load(); }
+    try {
+      await api.post('/platform/team', { display_id: displayId.trim().toUpperCase(), role_id: selectedRole });
+      toast({ title: 'Member added', description: 'User added to platform team.' });
+      setShowAdd(false); setDisplayId(''); setSelectedRole(''); await load();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    }
   };
 
   const removeMember = async () => {
     if (!removing) return;
-    const { error } = await supabase.from('platform_user_roles').delete().eq('id', removing.id);
-    if (error) toast({ variant: 'destructive', title: 'Error', description: error.message });
-    else { toast({ title: 'Member removed' }); setRemoving(null); await load(); }
+    try {
+      await api.delete(`/platform/team/${removing.id}`);
+      toast({ title: 'Member removed' });
+      setRemoving(null); await load();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    }
   };
 
   const assignableRoles = roles.filter(r => r.power_level < power);

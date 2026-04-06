@@ -7,7 +7,7 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { usePlanLimits } from '@/hooks/use-plan-limits';
 import { usePlan } from '@/hooks/use-plan';
 import { UpgradeModal } from '@/components/UpgradeModal';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { useQueryClient } from '@tanstack/react-query';
@@ -90,23 +90,21 @@ export default function Files() {
     setUploading(true);
     try {
       const uniqueFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}-${file.name}`;
-      const { data, error } = await supabase.storage
-        .from('project-files')
-        .upload(`projects/${uploadProject}/${uniqueFileName}`, file);
-        
-      if (error) throw error;
+      const path = `projects/${uploadProject}/${uniqueFileName}`;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'project-files');
+      formData.append('path', path);
+      await api.upload('/storage/upload', formData);
       
-      // Use storage_path for the database (consistent with types)
-      const { error: dbError } = await supabase.from('files').insert({
+      // Register file metadata via backend
+      await api.post('/files/upload', {
         name: file.name,
         storage_path: data.path,
         project_id: uploadProject,
-        uploaded_by: user?.id,
         size: file.size,
-        type: file.type.includes('image') ? 'design' : 'document'
+        type: file.type.includes('image') ? 'design' : 'document',
       });
-      
-      if (dbError) throw dbError;
       
       toast({ title: 'Success', description: 'File uploaded successfully' });
       // Use queryClient to invalidate directly for immediate refresh
@@ -122,9 +120,8 @@ export default function Files() {
 
   const handleDownload = async (fileUrl: string, fileName: string) => {
     try {
-      const { data, error } = await supabase.storage.from('project-files').createSignedUrl(fileUrl, 60);
-      if (error) throw error;
-      window.open(data.signedUrl);
+      const { signedUrl } = await api.post('/storage/signed-url', { bucket: 'project-files', path: fileUrl, expiresIn: 60 });
+      window.open(signedUrl);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error', description: err.message });
     }
@@ -135,10 +132,9 @@ export default function Files() {
       setLocalFiles(prev => prev.filter(f => f.id !== id));
       
       if (fileUrl) {
-        await supabase.storage.from('project-files').remove([fileUrl]);
+        await api.post('/storage/delete', { bucket: 'project-files', paths: [fileUrl] });
       }
-      const { error } = await supabase.from('files').delete().eq('id', id);
-      if (error) throw error;
+      await api.delete(`/files/${id}`);
       
       toast({ title: 'Success', description: 'File deleted' });
       queryClient.invalidateQueries({ queryKey: ['files'] });
@@ -172,11 +168,7 @@ export default function Files() {
 
   const handlePreview = async (fileUrl: string, fileName: string, fileType: string) => {
     try {
-      const { data, error } = await supabase.storage
-        .from('project-files')
-        .createSignedUrl(fileUrl, 60);
-      
-      if (error) throw error;
+      const { signedUrl } = await api.post('/storage/signed-url', { bucket: 'project-files', path: fileUrl, expiresIn: 60 });
       
       setPreviewFile({ url: data.signedUrl, name: fileName });
     } catch (err: any) {
