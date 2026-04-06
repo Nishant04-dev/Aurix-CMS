@@ -157,13 +157,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <div className="text-sm font-semibold truncate text-foreground">{user.name}</div>
               <div className="text-[11px] text-muted-foreground truncate">{user.email}</div>
               <div className="mt-1 inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary capitalize">
-                {user.role === 'client'     ? 'Client'
-                  : accountType === 'user'  ? 'User'
-                  : user.role === 'super_admin' ? 'Super Admin'
-                  : user.role === 'admin'   ? 'Business Owner'
-                  : user.role === 'manager' ? 'Manager'
+                {isPlatformOwner || user.role === 'super_admin' ? 'Super Admin'
+                  : user.role === 'admin'     ? 'Business Owner'
+                  : user.role === 'manager'   ? 'Manager'
                   : user.role === 'developer' ? 'Developer'
-                  : user.role === 'support' ? 'Support'
+                  : user.role === 'support'   ? 'Support'
+                  : user.role === 'client'    ? 'Client'
+                  : accountType === 'user'    ? 'User'
                   : 'Team Member'
                 }
               </div>

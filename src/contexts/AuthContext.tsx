@@ -160,13 +160,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (result) {
             applyProfile(result);
           } else {
-            // Backend unreachable — still show the user as logged in
-            // with minimal info so they're not stuck on a spinner
+            // Backend unreachable — show minimal user but DO NOT set role
+            // This prevents "Client" flash. User will see their email only.
             setUser({
               id:        session.user.id,
               email:     session.user.email || '',
               name:      session.user.email?.split('@')[0] || 'User',
-              role:      'client' as UserRole,
+              role:      'unknown' as UserRole,
               createdAt: session.user.created_at,
             } as any);
           }
