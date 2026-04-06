@@ -235,6 +235,9 @@ CREATE TRIGGER protect_platform_owner_trigger
   FOR EACH ROW EXECUTE FUNCTION public.protect_platform_owner();
 
 -- ── STEP 15: Rewrite get_user_organizations ───────────────────
+DROP FUNCTION IF EXISTS public.get_user_organizations(UUID);
+DROP FUNCTION IF EXISTS public.get_user_organizations(uuid);
+
 CREATE OR REPLACE FUNCTION public.get_user_organizations(p_user_id UUID)
 RETURNS TABLE (
   org_id    UUID,
