@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { logAudit } from '@/lib/auditLog';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,9 +14,6 @@ import { cn } from '@/lib/utils';
 import { InviteByIdModal } from '@/components/InviteByIdModal';
 import { usePermissions } from '@/hooks/use-permissions';
 
-const db = supabase as any;
-
-// ── Role badge colours ────────────────────────────────────────────────────────
 const ROLE_STYLES: Record<string, string> = {
   super_admin: 'bg-purple-100 text-purple-700 border-purple-200',
   admin:       'bg-indigo-100 text-indigo-700 border-indigo-200',
@@ -34,17 +31,13 @@ const STATUS_STYLES: Record<string, string> = {
   expired:   'bg-slate-100 text-slate-500 border-slate-200',
 };
 
-// ── Org logo with fallback ────────────────────────────────────────────────────
 function OrgLogo({ name, logoUrl, size = 'md' }: { name: string; logoUrl?: string | null; size?: 'sm' | 'md' }) {
   const dim = size === 'sm' ? 'h-9 w-9 text-sm' : 'h-12 w-12 text-base';
   if (logoUrl) {
     return (
-      <img
-        src={logoUrl}
-        alt={name}
+      <img src={logoUrl} alt={name}
         className={cn(dim, 'rounded-xl object-cover border border-border/20 shrink-0')}
-        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-      />
+        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
     );
   }
   return (
@@ -67,77 +60,27 @@ export default function Invitations() {
   const [showInvite, setShowInvite] = useState(false);
   const { toast } = useToast();
 
-  // ── Load received ─────────────────────────────────────────────────────────
   const loadReceived = async () => {
     if (!user) return;
     setLoadingR(true);
     try {
-      const { data, error } = await db
-        .from('invitations')
-        .select('id, org_id, invited_by, target_user_id, role_name, type, status, created_at, expires_at')
-        .eq('target_user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      console.log('Received:', { userId: user.id, count: data?.length, error: error?.message });
-
-      const rows: any[] = data || [];
-      if (!rows.length) { setReceived([]); return; }
-
-      // Fetch orgs (name + logo)
-      const orgIds = [...new Set(rows.map((r: any) => r.org_id).filter(Boolean))] as string[];
-      let orgMap: Record<string, { name: string; logo_url: string | null }> = {};
-      if (orgIds.length) {
-        const { data: orgs } = await db.from('organizations').select('id, name, logo_url').in('id', orgIds);
-        orgMap = Object.fromEntries((orgs || []).map((o: any) => [o.id, o]));
-      }
-
-      // Fetch inviter profiles
-      const inviterIds = [...new Set(rows.map((r: any) => r.invited_by).filter(Boolean))] as string[];
-      let inviterMap: Record<string, { name: string; email: string }> = {};
-      if (inviterIds.length) {
-        const { data: profiles } = await supabase
-          .from('profiles').select('id, name, email').in('id', inviterIds);
-        inviterMap = Object.fromEntries((profiles || []).map((p: any) => [p.id, p]));
-      }
-
-      setReceived(rows.map((r: any) => ({
-        ...r,
-        org:            orgMap[r.org_id] || { name: 'Unknown Organization', logo_url: null },
-        inviterProfile: inviterMap[r.invited_by] || null,
-      })));
+      const data = await api.get<any>('/invitations');
+      setReceived(data?.received || []);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
     } finally {
       setLoadingR(false);
     }
   };
 
-  // ── Load sent ─────────────────────────────────────────────────────────────
   const loadSent = async () => {
     if (!user) return;
     setLoadingS(true);
     try {
-      const { data, error } = await db
-        .from('invitations')
-        .select('id, org_id, invited_by, target_user_id, role_name, type, status, created_at, expires_at')
-        .eq('invited_by', user.id)
-        .order('created_at', { ascending: false });
-
-      console.log('Sent:', { userId: user.id, count: data?.length, error: error?.message });
-
-      const rows: any[] = data || [];
-      if (!rows.length) { setSent([]); return; }
-
-      const targetIds = [...new Set(rows.map((r: any) => r.target_user_id).filter(Boolean))] as string[];
-      let targetMap: Record<string, { name: string; email: string; display_id: string }> = {};
-      if (targetIds.length) {
-        const { data: profiles } = await supabase
-          .from('profiles').select('id, name, email, display_id').in('id', targetIds);
-        targetMap = Object.fromEntries((profiles || []).map((p: any) => [p.id, p]));
-      }
-
-      setSent(rows.map((r: any) => ({
-        ...r,
-        targetProfile: targetMap[r.target_user_id] || null,
-      })));
+      const data = await api.get<any>('/invitations');
+      setSent(data?.sent || []);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
     } finally {
       setLoadingS(false);
     }
@@ -145,71 +88,68 @@ export default function Invitations() {
 
   useEffect(() => { loadReceived(); loadSent(); }, [user]);
 
-  // ── Actions ───────────────────────────────────────────────────────────────
   const handleAccept = async (id: string) => {
     setActionId(id + 'accept');
-    const { data, error } = await db.rpc('accept_invitation', { p_invitation_id: id });
-    if (error || data?.error) {
-      toast({ variant: 'destructive', title: 'Error', description: data?.error || error?.message });
-    } else {
+    try {
+      const data = await api.post<any>('/invitations/respond', { invitation_id: id, action: 'accept' });
       toast({ title: '🎉 Welcome!', description: data?.message || 'You joined the organization.' });
       logAudit({ orgId: null, userId: user?.id, action: 'INVITE_ACCEPTED', entity: 'invitation', entityId: id });
       await refreshUser();
       await loadReceived();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    } finally {
+      setActionId(null);
     }
-    setActionId(null);
   };
 
   const handleReject = async (id: string) => {
     setActionId(id + 'reject');
-    const { data, error } = await db.rpc('reject_invitation', { p_invitation_id: id });
-    if (error || data?.error) {
-      toast({ variant: 'destructive', title: 'Error', description: data?.error || error?.message });
-    } else {
+    try {
+      await api.post('/invitations/respond', { invitation_id: id, action: 'reject' });
       toast({ title: 'Invitation declined' });
       logAudit({ orgId: null, userId: user?.id, action: 'INVITE_REJECTED', entity: 'invitation', entityId: id });
       await loadReceived();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    } finally {
+      setActionId(null);
     }
-    setActionId(null);
   };
 
   const handleCancel = async (id: string) => {
     setActionId(id + 'cancel');
-    const { data, error } = await db.rpc('cancel_invitation', { p_invitation_id: id });
-    if (error || data?.error) {
-      toast({ variant: 'destructive', title: 'Error', description: data?.error || error?.message });
-    } else {
+    try {
+      await api.post('/invitations/respond', { invitation_id: id, action: 'cancel' });
       toast({ title: 'Invitation cancelled' });
       await loadSent();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    } finally {
+      setActionId(null);
     }
-    setActionId(null);
   };
 
   const handleResend = async (inv: any) => {
     setActionId(inv.id + 'resend');
-    const { data: cancelData } = await db.rpc('cancel_invitation', { p_invitation_id: inv.id });
-    if (cancelData?.error) {
-      toast({ variant: 'destructive', title: 'Error', description: cancelData.error });
-      setActionId(null);
-      return;
-    }
-    if (!inv.targetProfile?.display_id) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Cannot resend — user ID not found' });
-      setActionId(null);
-      return;
-    }
-    const { data, error } = await db.rpc('send_invitation', {
-      p_display_id: inv.targetProfile.display_id,
-      p_role_name:  inv.role_name,
-      p_type:       inv.type || 'team',
-    });
-    if (error || data?.error) {
-      toast({ variant: 'destructive', title: 'Error', description: data?.error || error?.message });
-    } else {
-      toast({ title: 'Invitation resent!', description: data?.message });
+    try {
+      await api.post('/invitations/respond', { invitation_id: inv.id, action: 'cancel' });
+      if (!inv.targetProfile?.display_id) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Cannot resend — user ID not found' });
+        return;
+      }
+      await api.post('/invitations/send', {
+        display_id: inv.targetProfile.display_id,
+        role_name:  inv.role_name,
+        type:       inv.type || 'team',
+      });
+      toast({ title: 'Invitation resent!' });
       await loadSent();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    } finally {
+      setActionId(null);
     }
-    setActionId(null);
   };
 
   const pendingReceived = received.filter(i => i.status === 'pending');
@@ -219,7 +159,6 @@ export default function Invitations() {
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto animate-in fade-in duration-700">
-      {/* Header */}
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Invitations</h1>
@@ -235,7 +174,6 @@ export default function Invitations() {
         )}
       </div>
 
-      {/* Your ID */}
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="p-4 flex items-center gap-4">
           <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -273,107 +211,69 @@ export default function Invitations() {
           )}
         </TabsList>
 
-        {/* ── RECEIVED ── */}
         <TabsContent value="received" className="mt-4 space-y-4">
           {loadingR ? (
-            <div className="flex h-32 items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-primary/40" />
-            </div>
+            <div className="flex h-32 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary/40" /></div>
           ) : (
             <>
               {pendingReceived.map(inv => (
                 <Card key={inv.id} className="border-amber-200/60 shadow-sm overflow-hidden">
                   <CardContent className="p-0">
-                    {/* Top accent bar */}
                     <div className="h-1 bg-gradient-to-r from-amber-400 to-orange-400" />
                     <div className="p-5 space-y-4">
-                      {/* Org info */}
                       <div className="flex items-center gap-3">
-                        <OrgLogo name={inv.org.name} logoUrl={inv.org.logo_url} />
+                        <OrgLogo name={inv.org?.name || 'Org'} logoUrl={inv.org?.logo_url} />
                         <div>
-                          <p className="font-bold text-foreground text-base">{inv.org.name}</p>
+                          <p className="font-bold text-foreground text-base">{inv.org?.name || 'Organization'}</p>
                           <p className="text-xs text-muted-foreground">
-                            Invited by{' '}
-                            <span className="font-medium text-foreground">
-                              {inv.inviterProfile?.name || inv.inviterProfile?.email || 'Admin'}
-                            </span>
+                            Invited by <span className="font-medium text-foreground">{inv.inviterProfile?.name || inv.inviterProfile?.email || 'Admin'}</span>
                             {' · '}{new Date(inv.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                           </p>
                         </div>
                       </div>
-
-                      {/* Role badge */}
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">You'll join as</span>
-                        <span className={cn(
-                          'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold border capitalize',
-                          ROLE_STYLES[inv.role_name?.toLowerCase()] || ROLE_STYLES.client
-                        )}>
-                          <Shield className="h-3 w-3" />
-                          {inv.role_name}
+                        <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold border capitalize', ROLE_STYLES[inv.role_name?.toLowerCase()] || ROLE_STYLES.client)}>
+                          <Shield className="h-3 w-3" />{inv.role_name}
                         </span>
                       </div>
-
-                      {/* Expiry warning */}
                       {inv.expires_at && new Date(inv.expires_at) > new Date() && (
                         <p className="text-xs text-amber-600 flex items-center gap-1">
                           <Clock className="h-3 w-3" />
                           Expires {new Date(inv.expires_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                         </p>
                       )}
-
-                      {/* Actions */}
                       <div className="flex gap-2 pt-1">
-                        <Button
-                          size="sm"
-                          className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm"
-                          disabled={!!actionId}
-                          onClick={() => handleAccept(inv.id)}
-                        >
-                          {actionId === inv.id + 'accept'
-                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            : <><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Accept & Join</>}
+                        <Button size="sm" className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm"
+                          disabled={!!actionId} onClick={() => handleAccept(inv.id)}>
+                          {actionId === inv.id + 'accept' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Accept & Join</>}
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-destructive border-destructive/30 hover:bg-destructive/5"
-                          disabled={!!actionId}
-                          onClick={() => handleReject(inv.id)}
-                        >
-                          {actionId === inv.id + 'reject'
-                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            : <><XCircle className="h-3.5 w-3.5 mr-1.5" />Decline</>}
+                        <Button size="sm" variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/5"
+                          disabled={!!actionId} onClick={() => handleReject(inv.id)}>
+                          {actionId === inv.id + 'reject' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><XCircle className="h-3.5 w-3.5 mr-1.5" />Decline</>}
                         </Button>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               ))}
-
-              {/* Past received */}
               {pastReceived.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">History</p>
                   {pastReceived.map(inv => (
                     <div key={inv.id} className="flex items-center justify-between p-3.5 rounded-xl border border-border/40 bg-card/50 opacity-70">
                       <div className="flex items-center gap-3">
-                        <OrgLogo name={inv.org.name} logoUrl={inv.org.logo_url} size="sm" />
+                        <OrgLogo name={inv.org?.name || 'Org'} logoUrl={inv.org?.logo_url} size="sm" />
                         <div>
-                          <p className="text-sm font-semibold text-foreground">{inv.org.name}</p>
-                          <p className="text-xs text-muted-foreground capitalize">
-                            {inv.role_name} · {new Date(inv.created_at).toLocaleDateString()}
-                          </p>
+                          <p className="text-sm font-semibold text-foreground">{inv.org?.name || 'Organization'}</p>
+                          <p className="text-xs text-muted-foreground capitalize">{inv.role_name} · {new Date(inv.created_at).toLocaleDateString()}</p>
                         </div>
                       </div>
-                      <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase', STATUS_STYLES[inv.status] || STATUS_STYLES.expired)}>
-                        {inv.status}
-                      </span>
+                      <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase', STATUS_STYLES[inv.status] || STATUS_STYLES.expired)}>{inv.status}</span>
                     </div>
                   ))}
                 </div>
               )}
-
               {received.length === 0 && (
                 <div className="py-16 text-center border-2 border-dashed border-border/50 rounded-2xl">
                   <Mail className="h-10 w-10 mx-auto mb-3 text-muted-foreground opacity-30" />
@@ -385,13 +285,10 @@ export default function Invitations() {
           )}
         </TabsContent>
 
-        {/* ── SENT ── */}
         {canInvite && (
           <TabsContent value="sent" className="mt-4 space-y-4">
             {loadingS ? (
-              <div className="flex h-32 items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-primary/40" />
-              </div>
+              <div className="flex h-32 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary/40" /></div>
             ) : (
               <>
                 {pendingSent.length > 0 && (
@@ -408,25 +305,19 @@ export default function Invitations() {
                                 {(inv.targetProfile?.name || inv.targetProfile?.email || '?').charAt(0).toUpperCase()}
                               </div>
                               <div>
-                                <p className="text-sm font-semibold text-foreground">
-                                  {inv.targetProfile?.name || inv.targetProfile?.email || 'Unknown User'}
-                                </p>
+                                <p className="text-sm font-semibold text-foreground">{inv.targetProfile?.name || inv.targetProfile?.email || 'Unknown User'}</p>
                                 <div className="flex items-center gap-2 mt-0.5">
                                   <span className="text-xs text-muted-foreground font-mono">{inv.targetProfile?.display_id || '—'}</span>
-                                  <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full border capitalize', ROLE_STYLES[inv.role_name?.toLowerCase()] || ROLE_STYLES.client)}>
-                                    {inv.role_name}
-                                  </span>
+                                  <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full border capitalize', ROLE_STYLES[inv.role_name?.toLowerCase()] || ROLE_STYLES.client)}>{inv.role_name}</span>
                                   <span className="text-xs text-muted-foreground">{new Date(inv.created_at).toLocaleDateString()}</span>
                                 </div>
                               </div>
                             </div>
                             <div className="flex gap-2 shrink-0">
-                              <Button size="sm" variant="outline" className="h-8 gap-1"
-                                disabled={!!actionId} onClick={() => handleResend(inv)}>
+                              <Button size="sm" variant="outline" className="h-8 gap-1" disabled={!!actionId} onClick={() => handleResend(inv)}>
                                 {actionId === inv.id + 'resend' ? <Loader2 className="h-3 w-3 animate-spin" /> : <><RefreshCw className="h-3 w-3" />Resend</>}
                               </Button>
-                              <Button size="sm" variant="outline" className="h-8 gap-1 text-destructive border-destructive/30"
-                                disabled={!!actionId} onClick={() => handleCancel(inv.id)}>
+                              <Button size="sm" variant="outline" className="h-8 gap-1 text-destructive border-destructive/30" disabled={!!actionId} onClick={() => handleCancel(inv.id)}>
                                 {actionId === inv.id + 'cancel' ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Ban className="h-3 w-3" />Cancel</>}
                               </Button>
                             </div>
@@ -436,7 +327,6 @@ export default function Invitations() {
                     ))}
                   </div>
                 )}
-
                 {pastSent.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">History</p>
@@ -447,37 +337,27 @@ export default function Invitations() {
                             {(inv.targetProfile?.name || '?').charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-foreground">
-                              {inv.targetProfile?.name || inv.targetProfile?.email || 'Unknown'}
-                            </p>
-                            <p className="text-xs text-muted-foreground capitalize">
-                              {inv.role_name} · {new Date(inv.created_at).toLocaleDateString()}
-                            </p>
+                            <p className="text-sm font-semibold text-foreground">{inv.targetProfile?.name || inv.targetProfile?.email || 'Unknown'}</p>
+                            <p className="text-xs text-muted-foreground capitalize">{inv.role_name} · {new Date(inv.created_at).toLocaleDateString()}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           {inv.status === 'rejected' && (
-                            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1"
-                              disabled={!!actionId} onClick={() => handleResend(inv)}>
+                            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" disabled={!!actionId} onClick={() => handleResend(inv)}>
                               <RefreshCw className="h-3 w-3" /> Resend
                             </Button>
                           )}
-                          <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase', STATUS_STYLES[inv.status] || STATUS_STYLES.expired)}>
-                            {inv.status}
-                          </span>
+                          <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase', STATUS_STYLES[inv.status] || STATUS_STYLES.expired)}>{inv.status}</span>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-
                 {sent.length === 0 && (
                   <div className="py-16 text-center border-2 border-dashed border-border/50 rounded-2xl">
                     <Send className="h-10 w-10 mx-auto mb-3 text-muted-foreground opacity-30" />
                     <p className="text-sm font-medium text-muted-foreground">No invitations sent yet.</p>
-                    <Button size="sm" variant="outline" className="mt-3" onClick={() => setShowInvite(true)}>
-                      Send your first invite
-                    </Button>
+                    <Button size="sm" variant="outline" className="mt-3" onClick={() => setShowInvite(true)}>Send your first invite</Button>
                   </div>
                 )}
               </>

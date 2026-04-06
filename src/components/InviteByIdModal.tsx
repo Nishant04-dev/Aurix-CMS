@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,8 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Loader2, UserPlus, Search, RefreshCw, Ban, AlertCircle } from 'lucide-react';
 import { useRoles } from '@/hooks/use-database';
-
-const db = supabase as any;
 
 interface Props {
   open: boolean;
@@ -23,7 +21,6 @@ export function InviteByIdModal({ open, onClose, type = 'team' }: Props) {
   const [loading, setLoading]       = useState(false);
   const [preview, setPreview]       = useState<{ name: string; email: string } | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
-  // Existing pending invite for this user (duplicate case)
   const [existingInvite, setExistingInvite] = useState<{ id: string; role_name: string; created_at: string } | null>(null);
   const { toast } = useToast();
   const { data: roles } = useRoles();
@@ -42,73 +39,73 @@ export function InviteByIdModal({ open, onClose, type = 'team' }: Props) {
     setLookupLoading(true);
     setPreview(null);
     setExistingInvite(null);
-    const { data } = await supabase
-      .from('profiles')
-      .select('name, email')
-      .eq('display_id', displayId.trim().toUpperCase())
-      .maybeSingle();
-    if (data) setPreview(data as any);
-    else toast({ variant: 'destructive', title: 'Not found', description: 'No user with that ID.' });
-    setLookupLoading(false);
+    try {
+      const data = await api.get<any>('/invitations/lookup', { display_id: displayId.trim().toUpperCase() });
+      if (data) setPreview(data);
+      else toast({ variant: 'destructive', title: 'Not found', description: 'No user with that ID.' });
+    } catch {
+      toast({ variant: 'destructive', title: 'Not found', description: 'No user with that ID.' });
+    } finally {
+      setLookupLoading(false);
+    }
   };
 
   const handleSend = async () => {
     if (!displayId.trim() || !roleName) return;
     setLoading(true);
-    const { data, error } = await db.rpc('send_invitation', {
-      p_display_id: displayId.trim().toUpperCase(),
-      p_role_name:  roleName,
-      p_type:       type,
-    });
-
-    if (error || data?.error) {
-      const msg: string = data?.error || error?.message || '';
-
-      // Duplicate invite — show management options (no extra DB lookup needed)
+    try {
+      const data = await api.post<any>('/invitations/send', {
+        display_id: displayId.trim().toUpperCase(),
+        role_name:  roleName,
+        type,
+      });
+      toast({ title: 'Invitation sent!', description: data?.message });
+      reset();
+      onClose();
+    } catch (err: any) {
+      const msg: string = err.message || '';
       if (msg.includes('pending invitation already exists')) {
         toast({ title: 'Pending invite exists', description: 'You can cancel or resend the existing invitation.' });
       } else {
         toast({ variant: 'destructive', title: 'Error', description: msg });
       }
-    } else {
-      toast({ title: 'Invitation sent!', description: data?.message });
-      reset();
-      onClose();
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleCancelExisting = async () => {
     if (!existingInvite) return;
     setLoading(true);
-    const { data, error } = await db.rpc('cancel_invitation', { p_invitation_id: existingInvite.id });
-    if (error || data?.error) {
-      toast({ variant: 'destructive', title: 'Error', description: data?.error || error?.message });
-    } else {
+    try {
+      await api.post('/invitations/respond', { invitation_id: existingInvite.id, action: 'cancel' });
       toast({ title: 'Invite cancelled', description: 'You can now send a new invitation.' });
       setExistingInvite(null);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleResendExisting = async () => {
     if (!existingInvite) return;
     setLoading(true);
-    // Cancel then re-send
-    await db.rpc('cancel_invitation', { p_invitation_id: existingInvite.id });
-    const { data, error } = await db.rpc('send_invitation', {
-      p_display_id: displayId.trim().toUpperCase(),
-      p_role_name:  roleName,
-      p_type:       type,
-    });
-    if (error || data?.error) {
-      toast({ variant: 'destructive', title: 'Error', description: data?.error || error?.message });
-    } else {
+    try {
+      await api.post('/invitations/respond', { invitation_id: existingInvite.id, action: 'cancel' });
+      const data = await api.post<any>('/invitations/send', {
+        display_id: displayId.trim().toUpperCase(),
+        role_name:  roleName,
+        type,
+      });
       toast({ title: 'Invitation resent!', description: data?.message });
       reset();
       onClose();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const assignableRoles = roles?.filter(r => r.powerLevel < 90) || [];
@@ -126,7 +123,6 @@ export function InviteByIdModal({ open, onClose, type = 'team' }: Props) {
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* ID input */}
           <div className="space-y-2">
             <Label>User ID</Label>
             <div className="flex gap-2">
@@ -144,7 +140,6 @@ export function InviteByIdModal({ open, onClose, type = 'team' }: Props) {
             </div>
           </div>
 
-          {/* User preview */}
           {preview && !existingInvite && (
             <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
               <div className="h-9 w-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm">
@@ -157,7 +152,6 @@ export function InviteByIdModal({ open, onClose, type = 'team' }: Props) {
             </div>
           )}
 
-          {/* Duplicate invite warning */}
           {existingInvite && (
             <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 space-y-3">
               <div className="flex items-start gap-2">
@@ -183,20 +177,15 @@ export function InviteByIdModal({ open, onClose, type = 'team' }: Props) {
             </div>
           )}
 
-          {/* Role selector — hide when showing duplicate warning */}
           {!existingInvite && (
             <div className="space-y-2">
               <Label>Assign Role</Label>
               <Select value={roleName} onValueChange={setRoleName}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
                 <SelectContent>
                   {assignableRoles.length > 0
                     ? assignableRoles.map(r => (
-                        <SelectItem key={r.id} value={r.name.toLowerCase()}>
-                          {r.name}
-                        </SelectItem>
+                        <SelectItem key={r.id} value={r.name.toLowerCase()}>{r.name}</SelectItem>
                       ))
                     : (
                       <>

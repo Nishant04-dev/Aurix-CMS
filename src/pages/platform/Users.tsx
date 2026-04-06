@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,27 +21,29 @@ export default function PlatformUsers() {
   const { toast } = useToast();
 
   const load = async () => {
-    const { data } = await (supabase as any)
-      .from('profiles')
-      .select('id, name, email, role, status, org_id, created_at, organizations(name)')
-      .order('created_at', { ascending: false });
-    setUsers(data || []);
-    setLoading(false);
+    try {
+      const data = await api.get<any[]>('/platform/users');
+      setUsers(data || []);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
 
   const setStatus = async (id: string, status: string) => {
     setActionId(id + status);
-    const { error } = await (supabase as any)
-      .from('profiles').update({ status }).eq('id', id);
-    if (error) {
-      toast({ variant: 'destructive', title: 'Error', description: error.message });
-    } else {
+    try {
+      await api.patch(`/platform/users/${id}/status`, { status });
       setUsers(prev => prev.map(u => u.id === id ? { ...u, status } : u));
       toast({ title: 'Updated', description: `User ${status}` });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    } finally {
+      setActionId(null);
     }
-    setActionId(null);
   };
 
   const filtered = users.filter(u =>
@@ -94,7 +96,7 @@ export default function PlatformUsers() {
                         {u.status ?? 'active'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{u.organizations?.name || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{u.org_name || '—'}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1.5">

@@ -7,6 +7,7 @@ import { Send, Loader2, User as UserIcon, Building2, Hash, Clock, AlertTriangle,
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/apiClient';
 import type { Message } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -35,49 +36,36 @@ export default function Messages() {
   useEffect(() => {
     const fetchChannelInfo = async () => {
       if (!projects?.length) return;
-      
-      const projectIds = projects.map(p => p.id);
-      
-      // Get last message for each project
-      const { data: lastMessages } = await supabase
-        .from('messages')
-        .select('id, content, created_at, project_id')
-        .in('project_id', projectIds)
-        .order('created_at', { ascending: false });
-      
-      // Create a map of project_id -> last message
-      const lastMsgMap = new Map<string, { content: string; time: string }>();
-      if (lastMessages) {
-        lastMessages.forEach(msg => {
-          if (!lastMsgMap.has(msg.project_id)) {
-            lastMsgMap.set(msg.project_id, {
-              content: msg.content,
-              time: msg.created_at
-            });
-          }
+      try {
+        const lastMessages = await api.get<any[]>('/messages/last', {
+          project_ids: projects.map(p => p.id).join(','),
         });
+        const lastMsgMap = new Map<string, { content: string; time: string }>();
+        if (lastMessages) {
+          lastMessages.forEach((msg: any) => {
+            if (!lastMsgMap.has(msg.project_id)) {
+              lastMsgMap.set(msg.project_id, { content: msg.content, time: msg.created_at });
+            }
+          });
+        }
+        const channelList: ChannelInfo[] = projects
+          .map(p => ({
+            id: p.id, name: p.title, type: 'project' as const, status: p.status,
+            lastMessage: lastMsgMap.get(p.id)?.content,
+            lastMessageTime: lastMsgMap.get(p.id)?.time,
+          }))
+          .sort((a, b) => {
+            if (!a.lastMessageTime && !b.lastMessageTime) return 0;
+            if (!a.lastMessageTime) return 1;
+            if (!b.lastMessageTime) return -1;
+            return new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime();
+          });
+        setChannels(channelList);
+      } catch {
+        // fallback: just list projects without last message
+        setChannels(projects.map(p => ({ id: p.id, name: p.title, type: 'project' as const, status: p.status })));
       }
-      
-      // Build channel list with last message info, sorted by time
-      const channelList: ChannelInfo[] = projects
-        .map(p => ({
-          id: p.id,
-          name: p.title,
-          type: 'project' as const,
-          status: p.status,
-          lastMessage: lastMsgMap.get(p.id)?.content,
-          lastMessageTime: lastMsgMap.get(p.id)?.time
-        }))
-        .sort((a, b) => {
-          if (!a.lastMessageTime && !b.lastMessageTime) return 0;
-          if (!a.lastMessageTime) return 1;
-          if (!b.lastMessageTime) return -1;
-          return new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime();
-        });
-      
-      setChannels(channelList);
     };
-    
     fetchChannelInfo();
   }, [projects]);
 

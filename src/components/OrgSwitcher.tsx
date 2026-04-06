@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { ChevronDown, Check, Loader2, Building2 } from 'lucide-react';
 import {
@@ -31,15 +31,7 @@ export function OrgSwitcher() {
 
   const { data: orgs = [] } = useQuery<OrgOption[]>({
     queryKey: ['user_orgs'],
-    queryFn: async () => {
-      const { data, error } = await (supabase as any).rpc('get_user_organizations');
-      if (error) {
-        console.warn('get_user_organizations:', error.message);
-        return [];
-      }
-      console.log('ALL ORGS:', data);
-      return data || [];
-    },
+    queryFn: () => api.get<OrgOption[]>('/organizations/mine'),
     staleTime: 60_000,
     retry: false,
   });
@@ -56,12 +48,7 @@ export function OrgSwitcher() {
     if (switching) return;
     setSwitching(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await (supabase as any)
-        .from('profiles')
-        .update({ org_id: org.org_id, role: org.role })
-        .eq('id', user?.id);
-      if (error) throw error;
+      await api.post('/organizations/switch', { org_id: org.org_id });
       await refreshUser();
       toast({ title: `Switched to ${org.org_name}` });
       window.location.reload();

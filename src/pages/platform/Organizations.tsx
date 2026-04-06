@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Building2, CheckCircle2, XCircle, Clock } from 'lucide-react';
@@ -39,14 +40,6 @@ export default function PlatformOrganizations() {
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error', description: err.message });
     }
-    setActionId(null);
-  };
-
-  const setStatus = async (id: string, status: string) => {
-    setActionId(id + status);
-    const { error } = await supabase.rpc('set_org_status', { p_org_id: id, p_status: status });
-    if (error) toast({ variant: 'destructive', title: 'Error', description: error.message });
-    else { toast({ title: 'Updated', description: `Organization ${status}` }); await load(); }
     setActionId(null);
   };
 

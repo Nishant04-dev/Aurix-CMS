@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/lib/apiClient';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useLeaveOrganization } from '@/hooks/use-membership';
@@ -50,15 +51,11 @@ export default function Profile() {
   useEffect(() => {
     if (!user) return;
     const loadProfile = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('name, phone')
-        .eq('id', user.id)
-        .single();
-      if (data) {
-        setName((data as any).name || '');
-        setPhone((data as any).phone || '');
-      }
+      try {
+        const data = await api.get<any>('/profile');
+        setName(data?.name || '');
+        setPhone(data?.phone || '');
+      } catch { /* use auth context values as fallback */ }
     };
     loadProfile();
   }, [user]);
@@ -80,12 +77,7 @@ export default function Profile() {
 
     setProfileLoading(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ name: name.trim(), phone: phone.trim() || null })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      await api.patch('/profile', { name: name.trim(), phone: phone.trim() || null });
       toast({ title: 'Profile Updated', description: 'Your profile has been saved successfully.' });
       setProfileDirty(false);
     } catch (err: any) {

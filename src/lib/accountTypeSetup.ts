@@ -1,13 +1,13 @@
 /**
  * Deferred account_type write after signup.
  *
- * The DB trigger that creates the profiles row is async — we can't update
- * it immediately after signUp(). Strategy:
+ * Strategy:
  *  1. Store chosen type in localStorage before signUp()
  *  2. On next auth event (SIGNED_IN), AuthContext calls finalizeAccountType()
- *     which retries until the row exists, then writes and clears localStorage
+ *     which retries until the backend profile is ready, then writes and clears localStorage
  */
 
+import { API_BASE } from '@/lib/apiUrl';
 import { supabase } from '@/integrations/supabase/client';
 
 const LS_KEY = 'pending_account_type';
@@ -33,8 +33,7 @@ function sleep(ms: number) {
 
 /**
  * Called by AuthContext after SIGNED_IN.
- * Retries until the profile row exists, writes account_type, clears localStorage.
- * Never throws — always resolves (may return null on failure).
+ * Retries until the backend profile is ready, writes account_type, clears localStorage.
  */
 export async function finalizeAccountType(userId: string): Promise<'user' | 'business' | null> {
   const type = getPendingAccountType();
@@ -44,39 +43,35 @@ export async function finalizeAccountType(userId: string): Promise<'user' | 'bus
 
   for (let i = 1; i <= MAX_RETRIES; i++) {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', userId)
-        .single();
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { await sleep(RETRY_DELAY_MS); continue; }
 
-      if (error || !data) {
+      const res = await fetch(`${API_BASE}/api/profile`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ account_type: type }),
+      });
+
+      if (res.status === 404 || res.status === 500) {
         console.log(`[setup] Profile not ready (attempt ${i}/${MAX_RETRIES})`);
         await sleep(RETRY_DELAY_MS);
         continue;
       }
 
-      const { error: updateErr } = await (supabase as any)
-        .from('profiles')
-        .update({ account_type: type })
-        .eq('id', userId);
-
-      if (updateErr) {
-        console.warn(`[setup] Update failed (attempt ${i}):`, updateErr.message);
-        await sleep(RETRY_DELAY_MS);
-        continue;
+      if (res.ok) {
+        console.log(`[setup] account_type="${type}" saved`);
+        clearPendingAccountType();
+        return type;
       }
 
-      console.log(`[setup] account_type="${type}" saved`);
-      clearPendingAccountType();
-      return type;
+      await sleep(RETRY_DELAY_MS);
     } catch (err) {
       console.warn(`[setup] Exception (attempt ${i}):`, err);
       await sleep(RETRY_DELAY_MS);
     }
   }
 
-  // Give up — don't leave stale localStorage
   console.error('[setup] Could not write account_type after retries');
   clearPendingAccountType();
   return null;

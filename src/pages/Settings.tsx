@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { logAudit } from '@/lib/auditLog';
 import { useOrgSettings } from '@/hooks/use-org-settings';
 import { usePermissions } from '@/hooks/use-permissions';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
