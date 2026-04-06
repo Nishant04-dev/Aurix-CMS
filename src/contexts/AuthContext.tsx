@@ -34,10 +34,19 @@ function minimalUser(sessionUser: any): User {
 
 // ── Fetch full profile from backend API ───────────────────────
 async function fetchProfileFromBackend(token: string) {
+  if (!token) {
+    console.warn('fetchProfileFromBackend: no token provided');
+    return null;
+  }
+  console.log('[auth] fetching profile from', `${API_BASE}/api/profile`, '— token:', token.slice(0, 20) + '...');
   try {
     const res = await fetch(`${API_BASE}/api/profile`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
     });
+    console.log('[auth] profile response status:', res.status);
     if (!res.ok) return null;
     const json = await res.json();
     if (!json.success || !json.data) return null;
@@ -142,12 +151,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!mounted) return;
 
-        if (session?.user) {
+        if (session?.access_token) {
           setUser(minimalUser(session.user));
-          // Keep loading=true until real profile arrives
+          // Fetch real profile — token is guaranteed present
           const result = await fetchProfileFromBackend(session.access_token);
-          if (mounted && result) applyProfile(result);
-          else if (mounted) clearAuth(); // backend unreachable — force login
+          if (mounted && result) {
+            applyProfile(result);
+          } else if (mounted) {
+            // Backend unreachable or returned error — clear so user sees login
+            clearAuth();
+          }
         } else {
           clearAuth();
         }
@@ -165,12 +178,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       if (event === 'INITIAL_SESSION') return;
 
-      if (session?.user) {
+      if (session?.access_token) {
         setUser(minimalUser(session.user));
-        setLoading(false);
-
+        // Don't set loading=false yet — wait for real profile
         fetchProfileFromBackend(session.access_token).then(result => {
-          if (mounted && result) applyProfile(result);
+          if (!mounted) return;
+          if (result) applyProfile(result);
+          setLoading(false);
         });
 
         if (!finalizingRef.current && getPendingAccountType()) {
