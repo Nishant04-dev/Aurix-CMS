@@ -74,7 +74,8 @@ function AppRoutes() {
   if (!isPlatformOwner && accountType === 'business' && !orgId) return <Onboarding />;
 
   // Business users with an org that isn't approved yet → waiting page
-  if (accountType === 'business' && orgId && !isPlatformOwner && orgStatus !== 'approved') return <WaitingApproval />;
+  // Never block super_admin or platform owner
+  if (accountType === 'business' && orgId && !isPlatformOwner && user.role !== 'super_admin' && orgStatus !== 'approved') return <WaitingApproval />;
 
   return (
     <AppLayout>

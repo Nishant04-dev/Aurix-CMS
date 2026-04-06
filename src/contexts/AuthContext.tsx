@@ -67,6 +67,12 @@ async function fetchProfileFromBackend(token: string) {
       } catch { /* non-fatal */ }
     }
 
+    // Platform owner: always treat org as approved even if fetch failed
+    if (p.is_platform_owner && p.org_id && !orgStatus) {
+      orgStatus = 'approved';
+      orgPlan   = orgPlan ?? 'enterprise';
+    }
+
     const accountType: 'user' | 'business' =
       p.account_type === 'business' || p.account_type === 'user'
         ? p.account_type

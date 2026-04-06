@@ -27,7 +27,7 @@ const ROLE_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export default function Profile() {
-  const { user, accountType, upgradeToBusinessAccount, logout, orgId, refreshUser } = useAuth();
+  const { user, accountType, upgradeToBusinessAccount, logout, orgId, refreshUser, isPlatformOwner } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [upgradingBusiness, setUpgradingBusiness] = useState(false);
@@ -341,8 +341,8 @@ export default function Profile() {
         </Card>
       )}
 
-      {/* Danger Zone — Leave Organization (for any user who belongs to an org) */}
-      {orgId && (
+      {/* Danger Zone — Leave Organization (members only, not platform owner or sole owner) */}
+      {orgId && !isPlatformOwner && (
         <>
           <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 space-y-3">
             <h3 className="text-sm font-bold text-destructive uppercase tracking-widest flex items-center gap-2">

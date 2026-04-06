@@ -36,13 +36,16 @@ export function OrgSwitcher() {
     retry: false,
   });
 
-  // Use org settings name (already loaded) as primary, fallback to RPC result
+  // Use org settings name (already loaded) as primary, fallback to org list
   const currentOrgName = settings?.name ?? orgs.find(o => o.org_id === orgId)?.org_name;
 
-  // Don't render if no org
-  if (!orgId || !currentOrgName) return null;
+  // Don't render if no org at all
+  if (!orgId && orgs.length === 0) return null;
+  // If we have orgs but orgId isn't set yet, show first org name
+  const displayName = currentOrgName ?? orgs[0]?.org_name;
+  if (!displayName) return null;
 
-  const otherOrgs = orgs.filter(o => o.org_id !== orgId);
+  const otherOrgs = orgs.filter(o => o.org_id !== (orgId ?? orgs[0]?.org_id));
 
   const handleSwitch = async (org: OrgOption) => {
     if (switching) return;
@@ -67,7 +70,7 @@ export function OrgSwitcher() {
             ? <Loader2 className="h-3 w-3 animate-spin shrink-0" />
             : <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
           }
-          <span className="truncate flex-1">{currentOrgName}</span>
+          <span className="truncate flex-1">{displayName}</span>
           <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
         </button>
       </DropdownMenuTrigger>
@@ -80,10 +83,10 @@ export function OrgSwitcher() {
         {/* Current org */}
         <DropdownMenuItem className="flex items-center gap-3 py-2.5 opacity-60 cursor-default" disabled>
           <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
-            {currentOrgName.charAt(0).toUpperCase()}
+            {displayName.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate">{currentOrgName}</p>
+            <p className="text-sm font-semibold truncate">{displayName}</p>
             <p className="text-[10px] text-muted-foreground">Current</p>
           </div>
           <Check className="h-3.5 w-3.5 text-primary shrink-0" />
