@@ -21,13 +21,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// ── Minimal user from session only ───────────────────────────
+// ── Minimal user from session only (used while backend loads) ─
 function minimalUser(sessionUser: any): User {
   return {
     id: sessionUser.id,
     email: sessionUser.email || '',
     name: sessionUser.email?.split('@')[0] || 'User',
-    role: 'client' as UserRole,
+    role: 'loading' as UserRole,  // never show 'client' as fallback
     createdAt: sessionUser.created_at,
   } as any;
 }
@@ -134,8 +134,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     const failsafe = setTimeout(() => {
-      if (mounted) { console.warn('Auth failsafe fired'); setLoading(false); }
-    }, 4000);
+      if (mounted) { console.warn('Auth failsafe fired — backend may be unreachable'); setLoading(false); }
+    }, 10000); // 10s — enough time for remote backend to respond
 
     const init = async () => {
       try {
@@ -144,9 +144,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user) {
           setUser(minimalUser(session.user));
-          fetchProfileFromBackend(session.access_token).then(result => {
-            if (mounted && result) applyProfile(result);
-          });
+          // Keep loading=true until real profile arrives
+          const result = await fetchProfileFromBackend(session.access_token);
+          if (mounted && result) applyProfile(result);
+          else if (mounted) clearAuth(); // backend unreachable — force login
         } else {
           clearAuth();
         }

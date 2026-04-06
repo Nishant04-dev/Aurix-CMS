@@ -57,7 +57,8 @@ function AppRoutes() {
   const { user, orgId, orgStatus, isPlatformOwner, accountType, loading } = useAuth();
   const { can, isAdmin, isClient: isClientRole } = usePermissions();
 
-  if (loading) {
+  // Show spinner while auth is initializing OR while real profile is still loading
+  if (loading || (user && (user as any).role === 'loading')) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
