@@ -1,0 +1,191 @@
+import { z } from 'zod';
+import { inviteQueue } from '../queue/queues.js';
+import { supabase } from '../config/supabase.js';
+import { ok, created, badRequest, forbidden, notFound, serverError } from '../utils/response.js';
+import { logger } from '../utils/logger.js';
+import { logAudit } from '../utils/auditLogger.js';
+
+const SendInviteSchema = z.object({
+  display_id: z.string().regex(/^AURIX-\d{5}$/, 'Invalid ID format. Use AURIX-XXXXX'),
+  role_name:  z.string().min(1),
+  type:       z.enum(['team', 'client']).default('team'),
+});
+
+export async function sendInvitation(req, res) {
+  try {
+    const { orgId, id: userId, role, powerLevel } = req.user;
+
+    if (!['admin', 'super_admin', 'manager'].includes(role)) {
+      return forbidden(res, 'Only admins and managers can send invitations');
+    }
+
+    const { display_id, role_name, type } = SendInviteSchema.parse(req.body);
+
+    // Validate target user exists
+    const { data: target } = await supabase
+      .from('profiles')
+      .select('id, name, email, org_id, power_level')
+      .eq('display_id', display_id)
+      .single();
+
+    if (!target) return badRequest(res, 'User not found. Check the ID and try again.');
+    if (target.id === userId) return badRequest(res, 'You cannot invite yourself');
+    if (target.org_id === orgId) return badRequest(res, 'This user is already in your organization');
+
+    // Check for existing pending invite
+    const { data: existing } = await supabase
+      .from('invitations')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('target_user_id', target.id)
+      .eq('status', 'pending')
+      .single();
+
+    if (existing) return badRequest(res, 'A pending invitation already exists for this user');
+
+    // Hierarchy check
+    const { data: targetRole } = await supabase
+      .from('roles')
+      .select('power_level')
+      .eq('org_id', orgId)
+      .ilike('name', role_name)
+      .single();
+
+    if (targetRole && targetRole.power_level >= powerLevel) {
+      return forbidden(res, 'Cannot assign a role equal to or higher than your own');
+    }
+
+    const job = await inviteQueue.add('send-invitation', {
+      displayId: display_id,
+      roleName:  role_name,
+      type,
+      userId,
+      orgId,
+    });
+
+    logger.info('Invitation queued', { jobId: job.id, displayId: display_id, orgId });
+    logAudit({ orgId, actorId: userId, action: 'invite.sent', targetType: 'invitation', targetId: target.id, metadata: { role_name, type, display_id } });
+    return created(res, { jobId: job.id, targetName: target.name || target.email }, 'Invitation sent');
+  } catch (err) {
+    if (err.name === 'ZodError') return badRequest(res, err.errors.map(e => e.message).join('; '));
+    logger.error('sendInvitation error', { err: err.message });
+    return serverError(res, err.message);
+  }
+}
+
+export async function respondToInvitation(req, res) {
+  try {
+    const { id: userId } = req.user;
+    const { invitation_id, action } = req.body;
+
+    if (!invitation_id || !['accept', 'reject', 'cancel'].includes(action)) {
+      return badRequest(res, 'invitation_id and action (accept|reject|cancel) required');
+    }
+
+    // Cancel — sender cancels their own invite
+    if (action === 'cancel') {
+      const { data: inv } = await supabase
+        .from('invitations').select('id, invited_by, org_id').eq('id', invitation_id).maybeSingle();
+      if (!inv) return notFound(res, 'Invitation not found');
+      if (inv.invited_by !== userId) return forbidden(res, 'You can only cancel your own invitations');
+      const { error } = await supabase
+        .from('invitations').update({ status: 'cancelled' }).eq('id', invitation_id);
+      if (error) throw error;
+      return ok(res, null, 'Invitation cancelled');
+    }
+
+    // Ban check — only needed for accept
+    if (action === 'accept') {
+      const { data: inv } = await supabase
+        .from('invitations').select('org_id').eq('id', invitation_id).maybeSingle();
+      if (inv?.org_id) {
+        const { data: ban } = await supabase
+          .from('banned_members').select('id')
+          .eq('user_id', userId).eq('org_id', inv.org_id).maybeSingle();
+        if (ban) return forbidden(res, 'You are banned from this organization.');
+      }
+    }
+
+    const fn = action === 'accept' ? 'accept_invitation' : 'reject_invitation';
+    const { data, error } = await supabase.rpc(fn, { p_invitation_id: invitation_id });
+
+    if (error) return serverError(res, error.message);
+    if (data?.error) return badRequest(res, data.error);
+
+    // On accept: create/restore membership record
+    if (action === 'accept') {
+      const { data: fullInv } = await supabase
+        .from('invitations')
+        .select('org_id, role_name')
+        .eq('id', invitation_id)
+        .maybeSingle();
+
+      if (fullInv?.org_id) {
+        await supabase
+          .from('memberships')
+          .upsert({
+            user_id: userId,
+            org_id:  fullInv.org_id,
+            role:    fullInv.role_name || 'client',
+            status:  'active',
+          }, { onConflict: 'user_id,org_id' });
+      }
+    }
+
+    const auditAction = action === 'accept' ? 'invite.accepted' : 'invite.rejected';
+    const { data: inv } = await supabase.from('invitations').select('org_id').eq('id', invitation_id).maybeSingle();
+    if (inv?.org_id) {
+      logAudit({ orgId: inv.org_id, actorId: userId, action: auditAction, targetType: 'invitation', targetId: invitation_id });
+    }
+
+    return ok(res, data, data?.message || `Invitation ${action}ed`);
+  } catch (err) {
+    logger.error('respondToInvitation error', { err: err.message });
+    return serverError(res, err.message);
+  }
+}
+
+export async function getMyInvitations(req, res) {
+  try {
+    const { id: userId } = req.user;
+
+    // Received invitations
+    const { data: received, error: recErr } = await supabase
+      .from('invitations')
+      .select('*, org:organizations(name, logo_url), inviterProfile:profiles!invitations_invited_by_fkey(name, email)')
+      .eq('target_user_id', userId)
+      .order('created_at', { ascending: false });
+    if (recErr) throw recErr;
+
+    // Sent invitations
+    const { data: sent, error: sentErr } = await supabase
+      .from('invitations')
+      .select('*, targetProfile:profiles!invitations_target_user_id_fkey(name, email, display_id)')
+      .eq('invited_by', userId)
+      .order('created_at', { ascending: false });
+    if (sentErr) throw sentErr;
+
+    return ok(res, { received: received ?? [], sent: sent ?? [] });
+  } catch (err) {
+    return serverError(res, err.message);
+  }
+}
+
+export async function lookupUserByDisplayId(req, res) {
+  try {
+    const { display_id } = req.query;
+    if (!display_id) return badRequest(res, 'display_id query param required');
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('name, email, display_id')
+      .eq('display_id', display_id.toUpperCase())
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return notFound(res, 'User not found');
+    return ok(res, data);
+  } catch (err) {
+    return serverError(res, err.message);
+  }
+}

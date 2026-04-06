@@ -23,5 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# Backend — not pushed to GitHub
-backend/
+# Backend node_modules only — source code IS tracked
+backend/node_modules/
+backend/logs/
+backend/src.zip
