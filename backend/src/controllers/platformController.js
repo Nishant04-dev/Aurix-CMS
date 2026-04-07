@@ -121,11 +121,36 @@ export async function updateFeatureFlag(req, res) {
 export async function getPlatformTeam(req, res) {
   try {
     const [membersRes, rolesRes] = await Promise.all([
-      supabase.from('platform_user_roles').select('*, platform_roles(id,name,power_level), profiles(id,name,email)'),
+      supabase.from('platform_user_roles').select('id, user_id, role_id, created_at, platform_roles(id,name,power_level)'),
       supabase.from('platform_roles').select('*').order('power_level', { ascending: false }),
     ]);
     if (membersRes.error) throw membersRes.error;
-    return ok(res, { members: membersRes.data ?? [], roles: rolesRes.data ?? [] });
+
+    const members = membersRes.data ?? [];
+
+    // Manually fetch profiles for each user_id to avoid implicit join issues
+    const userIds = [...new Set(members.map(m => m.user_id).filter(Boolean))];
+    let profileMap: Record<string, any> = {};
+
+    if (userIds.length > 0) {
+      const { data: profiles, error: profilesErr } = await supabase
+        .from('profiles')
+        .select('id, name, email, avatar_url')
+        .in('id', userIds);
+
+      if (profilesErr) {
+        logger.warn('getPlatformTeam: profiles fetch failed', { err: profilesErr.message });
+      } else {
+        profileMap = Object.fromEntries((profiles ?? []).map(p => [p.id, p]));
+      }
+    }
+
+    const enriched = members.map(m => ({
+      ...m,
+      profiles: profileMap[m.user_id] ?? null,
+    }));
+
+    return ok(res, { members: enriched, roles: rolesRes.data ?? [] });
   } catch (err) {
     logger.error('getPlatformTeam error', { err: err.message });
     return serverError(res, err.message);
@@ -316,13 +341,28 @@ export async function getAllUsers(req, res) {
   try {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, name, email, role, status, org_id, created_at, organizations(name)')
+      .select('id, name, email, role, status, org_id, created_at')
       .order('created_at', { ascending: false });
     if (error) throw error;
+
+    const orgIds = [...new Set((data ?? []).map(u => u.org_id).filter(Boolean))];
+    let orgMap: Record<string, string> = {};
+
+    if (orgIds.length > 0) {
+      const { data: orgs, error: orgsErr } = await supabase
+        .from('organizations')
+        .select('id, name')
+        .in('id', orgIds);
+      if (orgsErr) {
+        logger.warn('getAllUsers: orgs fetch failed', { err: orgsErr.message });
+      } else {
+        orgMap = Object.fromEntries((orgs ?? []).map(o => [o.id, o.name]));
+      }
+    }
+
     const users = (data ?? []).map(u => ({
       ...u,
-      org_name: u.organizations?.name ?? null,
-      organizations: undefined,
+      org_name: u.org_id ? (orgMap[u.org_id] ?? null) : null,
     }));
     return ok(res, users);
   } catch (err) {
