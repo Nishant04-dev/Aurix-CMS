@@ -53,6 +53,29 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// When role is 'unknown' the backend was unreachable — show a retry prompt
+// instead of redirecting to dashboard (which causes the nav loop)
+function UnknownRoleGate({ children }: { children: React.ReactNode }) {
+  const { user, refreshUser } = useAuth();
+  const [retrying, setRetrying] = React.useState(false);
+
+  if (user?.role === 'unknown') {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-4 text-muted-foreground">
+        <p className="text-sm">Could not load your account role. Backend may be unreachable.</p>
+        <button
+          className="text-xs text-primary underline underline-offset-2"
+          disabled={retrying}
+          onClick={async () => { setRetrying(true); await refreshUser(); setRetrying(false); }}
+        >
+          {retrying ? 'Retrying…' : 'Retry'}
+        </button>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   const { user, orgId, orgStatus, isPlatformOwner, accountType, loading } = useAuth();
   const { can, isAdmin, isClient: isClientRole } = usePermissions();
@@ -85,14 +108,14 @@ function AppRoutes() {
         <Route path="/" element={<Dashboard />} />
 
         {/* Permission-gated routes */}
-        <Route path="/clients"  element={can('view_client')   ? <Clients />  : <Navigate to="/" replace />} />
-        <Route path="/team"     element={can('invite_user')   ? <Team />     : <Navigate to="/" replace />} />
-        <Route path="/roles"    element={can('manage_roles')  ? <Roles />    : <Navigate to="/" replace />} />
-        <Route path="/projects" element={isClientRole || can('view_project')  ? <Projects /> : <Navigate to="/" replace />} />
-        <Route path="/tasks"    element={isClientRole || can('view_project')  ? <Tasks />    : <Navigate to="/" replace />} />
-        <Route path="/invoices" element={isClientRole || can('view_invoices') ? <Invoices /> : <Navigate to="/" replace />} />
-        <Route path="/messages" element={isClientRole || can('view_project')  ? <Messages /> : <Navigate to="/" replace />} />
-        <Route path="/files"    element={isClientRole || can('view_file')     ? <Files />    : <Navigate to="/" replace />} />
+        <Route path="/clients"  element={<UnknownRoleGate>{can('view_client')   ? <Clients />  : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/team"     element={<UnknownRoleGate>{can('invite_user')   ? <Team />     : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/roles"    element={<UnknownRoleGate>{can('manage_roles')  ? <Roles />    : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/projects" element={<UnknownRoleGate>{isClientRole || can('view_project')  ? <Projects /> : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/tasks"    element={<UnknownRoleGate>{isClientRole || can('view_project')  ? <Tasks />    : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/invoices" element={<UnknownRoleGate>{isClientRole || can('view_invoices') ? <Invoices /> : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/messages" element={<UnknownRoleGate>{isClientRole || can('view_project')  ? <Messages /> : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/files"    element={<UnknownRoleGate>{isClientRole || can('view_file')     ? <Files />    : <Navigate to="/" replace />}</UnknownRoleGate>} />
 
         <Route path="/profile" element={<Profile />} />
         <Route path="/settings" element={isClientRole ? <Navigate to="/" replace /> : <Settings />} />
