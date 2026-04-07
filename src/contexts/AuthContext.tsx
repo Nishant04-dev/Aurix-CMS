@@ -31,9 +31,12 @@ async function fetchProfile(token: string) {
   console.log('[auth] GET /api/profile →', API_BASE, '| token:', token.slice(0, 15) + '...');
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(`${API_BASE}/api/profile`, {
       headers: { Authorization: `Bearer ${token}` },
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
 
     console.log('[auth] /api/profile status:', res.status);
 
@@ -63,9 +66,12 @@ async function fetchProfile(token: string) {
 
     if (p.org_id) {
       try {
+        const orgController = new AbortController();
+        const orgTimeout = setTimeout(() => orgController.abort(), 5000);
         const orgRes = await fetch(`${API_BASE}/api/organizations`, {
           headers: { Authorization: `Bearer ${token}` },
-        });
+          signal: orgController.signal,
+        }).finally(() => clearTimeout(orgTimeout));
         if (orgRes.ok) {
           const orgJson = await orgRes.json();
           if (orgJson.success && orgJson.data) {
@@ -195,7 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn('[auth] failsafe — no auth event received');
         setLoading(false);
       }
-    }, 8000);
+    }, 5000);
 
     return () => {
       mounted = false;

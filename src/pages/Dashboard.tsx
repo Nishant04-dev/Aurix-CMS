@@ -63,20 +63,30 @@ function OrgDashboard() {
   const { user } = useAuth();
   const { can } = usePermissions();
   const { fmt } = useOrgCurrency();
-  const { data: clients }       = useClients();
-  const { data: projects }      = useProjects();
-  const { data: invoices }      = useInvoices();
+  const { data: clients }                               = useClients();
+  const { data: projects,   isLoading: loadingProjects,   isError: errorProjects }   = useProjects();
+  const { data: invoices,   isLoading: loadingInvoices,   isError: errorInvoices }   = useInvoices();
   const { data: notifications } = useNotifications();
   const { data: tasks }         = useTasks();
 
   const [showProjectModal, setShowProjectModal] = useState(false);
 
-  const isLoading = !projects && !invoices;
+  const isLoading = loadingProjects || loadingInvoices;
+  const isError   = errorProjects   || errorInvoices;
 
   if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary/40" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-3 text-muted-foreground">
+        <AlertCircle className="h-8 w-8 text-destructive/60" />
+        <p className="text-sm">Could not load dashboard data. Check your connection and try refreshing.</p>
       </div>
     );
   }
