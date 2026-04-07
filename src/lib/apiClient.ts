@@ -28,16 +28,36 @@ async function request<T>(
     if (qs) url += `?${qs}`;
   }
 
-  const res = await fetch(url, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
 
-  const json = await res.json();
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    clearTimeout(timeout);
+    if (err.name === 'AbortError') throw new Error('Request timed out. Check your connection.');
+    // Mixed content or network error — give a useful message
+    throw new Error(`Cannot reach backend at ${API_BASE}. Check CORS or mixed-content settings.`);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  let json: any;
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error(`Server returned non-JSON response (status ${res.status})`);
+  }
+
   if (!res.ok || !json.success) {
     throw new Error(json.error || `Request failed: ${res.status}`);
   }
@@ -46,18 +66,36 @@ async function request<T>(
 
 async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
   const token = await getToken();
-
   const url = `${API_BASE}/api${path}`;
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: formData,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
 
-  const json = await res.json();
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    clearTimeout(timeout);
+    if (err.name === 'AbortError') throw new Error('Upload timed out.');
+    throw new Error(`Cannot reach backend at ${API_BASE}.`);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  let json: any;
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error(`Server returned non-JSON response (status ${res.status})`);
+  }
+
   if (!res.ok || !json.success) {
     throw new Error(json.error || `Request failed: ${res.status}`);
   }
