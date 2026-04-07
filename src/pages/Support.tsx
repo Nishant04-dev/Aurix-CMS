@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { api } from '@/lib/apiClient';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
@@ -30,15 +31,24 @@ export default function Support() {
   const { toast } = useToast();
 
   const loadConversations = async () => {
-    if (!orgId) return;
-    const data = await api.get('/support/conversations');
-    setConversations(data || []);
-    setLoading(false);
+    if (!orgId) { setLoading(false); return; }
+    try {
+      const data = await api.get<any[]>('/platform/support');
+      setConversations(data || []);
+    } catch {
+      // non-fatal — show empty state
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadMessages = async (convId: string) => {
-    const data = await api.get('/platform/support/messages', { conversation_id: convId });
-    setMessages(data || []);
+    try {
+      const data = await api.get<any[]>('/platform/support/messages', { conversation_id: convId });
+      setMessages(data || []);
+    } catch {
+      setMessages([]);
+    }
     setTimeout(() => scrollRef.current?.scrollTo({ top: 9999, behavior: 'smooth' }), 100);
   };
 
