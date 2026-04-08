@@ -3,24 +3,24 @@ import { logger } from './logger.js';
 
 /**
  * Fire-and-forget audit log writer.
- * Never throws — errors are swallowed so they never break the calling controller.
+ * Maps to actual audit_logs columns: actor_id, action, entity, entity_id, target_id, org_id, metadata
  *
  * @param {object} params
  * @param {string} params.orgId
  * @param {string} params.actorId
- * @param {string} params.action  - e.g. 'member.removed', 'invite.sent'
- * @param {string} params.targetType - 'user' | 'org' | 'invitation' | 'role' | 'channel'
- * @param {string} [params.targetId]
+ * @param {string} params.action       - e.g. 'project.created', 'invite.sent'
+ * @param {string} [params.targetType] - maps to entity column
+ * @param {string} [params.targetId]   - maps to entity_id column
  * @param {object} [params.metadata]
  */
 export async function logAudit({ orgId, actorId, action, targetType, targetId, metadata = {} }) {
   try {
     const { error } = await supabase.from('audit_logs').insert({
-      org_id:      orgId,
-      actor_id:    actorId,
+      org_id:    orgId    || null,
+      actor_id:  actorId  || null,
       action,
-      target_type: targetType,
-      target_id:   targetId || null,
+      entity:    targetType || null,
+      entity_id: targetId   || null,
       metadata,
     });
     if (error) {

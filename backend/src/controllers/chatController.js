@@ -112,18 +112,23 @@ export async function getChannels(req, res) {
   try {
     const { id: userId, orgId } = req.user;
 
-    const { data, error } = await supabase
+    const { data: memberships, error } = await supabase
       .from('channel_members')
-      .select('channel_id, chat_channels(id, name, org_id, created_by, created_at)')
+      .select('channel_id')
       .eq('user_id', userId);
 
     if (error) throw error;
+    if (!memberships?.length) return ok(res, []);
 
-    const channels = (data || [])
-      .map(row => row.chat_channels)
-      .filter(ch => ch && ch.org_id === orgId);
+    const channelIds = memberships.map(m => m.channel_id);
+    const { data: channels, error: chErr } = await supabase
+      .from('chat_channels')
+      .select('id, name, org_id, created_by, created_at, project_id, type')
+      .in('id', channelIds)
+      .eq('org_id', orgId);
 
-    return ok(res, channels);
+    if (chErr) throw chErr;
+    return ok(res, channels ?? []);
   } catch (err) {
     logger.error('getChannels error', { err: err.message });
     return serverError(res, err.message);
@@ -174,7 +179,7 @@ export async function getMessages(req, res) {
 
     let query = supabase
       .from('chat_messages')
-      .select('*, profiles!chat_messages_sender_id_fkey(name, avatar_url)')
+      .select('*')
       .eq('channel_id', channelId)
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -184,13 +189,21 @@ export async function getMessages(req, res) {
     const { data, error } = await query;
     if (error) throw error;
 
-    // Return in ascending order for display
+    // Fetch sender profiles manually
+    const senderIds = [...new Set((data || []).map(m => m.sender_id).filter(Boolean))];
+    let profileMap = {};
+    if (senderIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles').select('id, name, avatar_url').in('id', senderIds);
+      profileMap = Object.fromEntries((profiles ?? []).map(p => [p.id, p]));
+    }
+
     const msgs = (data || []).reverse().map(m => ({
       id:            m.id,
       channel_id:    m.channel_id,
       sender_id:     m.sender_id,
-      sender_name:   m.profiles?.name || 'Unknown',
-      sender_avatar: m.profiles?.avatar_url || null,
+      sender_name:   profileMap[m.sender_id]?.name || 'Unknown',
+      sender_avatar: profileMap[m.sender_id]?.avatar_url || null,
       content:       m.content,
       attachments:   m.attachments,
       created_at:    m.created_at,

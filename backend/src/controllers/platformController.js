@@ -340,7 +340,7 @@ export async function getPlatformAuditLogs(req, res) {
   try {
     const { data, error } = await supabase
       .from('audit_logs')
-      .select('id, action, user_id, created_at, entity, metadata')
+      .select('id, action, actor_id, created_at, entity, metadata, org_id')
       .order('created_at', { ascending: false })
       .limit(50);
     if (error) throw error;

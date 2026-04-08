@@ -169,12 +169,32 @@ export function requireRole(...roles) {
 
 /**
  * Require platform owner access.
+ * Checks both is_platform_owner flag AND platform_user_roles table as fallback.
  */
-export function requirePlatformOwner(req, res, next) {
-  if (!req.user?.isPlatformOwner) {
-    return forbidden(res, 'Platform owner access required');
+export async function requirePlatformOwner(req, res, next) {
+  if (req.user?.isPlatformOwner) return next();
+
+  // Fallback: check platform_user_roles table directly
+  try {
+    const { data: userRole } = await supabase
+      .from('platform_user_roles')
+      .select('role_id, platform_roles(name)')
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
+    if (userRole) {
+      const roleName = userRole.platform_roles?.name;
+      if (roleName === 'Owner') {
+        // Patch req.user so downstream checks pass
+        req.user.isPlatformOwner = true;
+        return next();
+      }
+    }
+  } catch (err) {
+    logger.warn('requirePlatformOwner fallback check failed', { err: err.message });
   }
-  next();
+
+  return forbidden(res, 'Platform owner access required');
 }
 
 /**

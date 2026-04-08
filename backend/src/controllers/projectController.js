@@ -1,9 +1,17 @@
 import { z } from 'zod';
-import { projectQueue } from '../queue/queues.js';
-import { checkLimit } from '../services/permissionService.js';
 import { supabase } from '../config/supabase.js';
 import { ok, created, badRequest, forbidden, notFound, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
+import { logAudit } from '../utils/auditLogger.js';
+
+const REDIS_ENABLED = process.env.REDIS_ENABLED === 'true';
+
+// Lazy-load queue only when Redis is enabled
+async function getProjectQueue() {
+  if (!REDIS_ENABLED) return null;
+  const { projectQueue } = await import('../queue/queues.js');
+  return projectQueue;
+}
 
 const CreateProjectSchema = z.object({
   title:        z.string().min(1).max(200),
@@ -19,7 +27,7 @@ export async function createProject(req, res) {
   try {
     const { orgId, id: userId } = req.user;
 
-    // Check plan limit
+    const { checkLimit } = await import('../services/permissionService.js');
     const limit = await checkLimit(orgId, 'project');
     if (!limit.allowed) return forbidden(res, limit.reason);
 
@@ -27,24 +35,50 @@ export async function createProject(req, res) {
 
     // Validate client belongs to same org
     const { data: client } = await supabase
-      .from('clients')
-      .select('id')
-      .eq('id', data.client_id)
-      .eq('org_id', orgId)
-      .single();
-
+      .from('clients').select('id').eq('id', data.client_id).eq('org_id', orgId).single();
     if (!client) return badRequest(res, 'Client not found in your organization');
 
-    const job = await projectQueue.add('create-project', {
-      type: 'create',
-      data,
-      userId,
-      orgId,
+    const queue = await getProjectQueue();
+
+    if (queue) {
+      const job = await queue.add('create-project', { type: 'create', data, userId, orgId });
+      logger.info('Project creation queued', { jobId: job.id, orgId });
+      return created(res, { jobId: job.id }, 'Project creation queued');
+    }
+
+    // Direct insert when Redis is disabled
+    const { data: project, error } = await supabase
+      .from('projects')
+      .insert({ ...data, org_id: orgId, created_by: userId })
+      .select().single();
+    if (error) throw error;
+
+    // Auto-create project chat channel
+    const { data: channel } = await supabase
+      .from('chat_channels')
+      .insert({ name: project.title.toLowerCase().replace(/\s+/g, '-').slice(0, 50), type: 'project', project_id: project.id, org_id: orgId, created_by: userId })
+      .select().single();
+
+    if (channel) {
+      // Auto-add creator + admins to channel
+      const { data: admins } = await supabase
+        .from('memberships').select('user_id').eq('org_id', orgId).in('role', ['admin', 'super_admin']);
+      const memberIds = [...new Set([userId, ...(admins ?? []).map(a => a.user_id)])];
+      await supabase.from('channel_members').insert(
+        memberIds.map(uid => ({ channel_id: channel.id, user_id: uid }))
+      );
+    }
+
+    logAudit({ orgId, actorId: userId, action: 'project.created', targetType: 'project', targetId: project.id, metadata: { title: project.title } });
+
+    await supabase.from('notifications').insert({
+      user_id: userId, title: 'Project Created',
+      message: `Project "${project.title}" has been created successfully.`,
     });
 
-    logger.info('Project creation queued', { jobId: job.id, orgId });
-    return created(res, { jobId: job.id }, 'Project creation queued');
+    return created(res, project, 'Project created');
   } catch (err) {
+    if (err.name === 'ZodError') return badRequest(res, err.errors.map(e => e.message).join('; '));
     logger.error('createProject error', { err: err.message });
     return serverError(res, err.message);
   }
@@ -104,11 +138,11 @@ const UpdateProjectSchema = z.object({
 
 export async function updateProject(req, res) {
   try {
-    const { orgId } = req.user;
+    const { orgId, id: userId } = req.user;
     const { id } = req.params;
 
     const { data: existing } = await supabase
-      .from('projects').select('id').eq('id', id).eq('org_id', orgId).single();
+      .from('projects').select('id, title').eq('id', id).eq('org_id', orgId).single();
     if (!existing) return notFound(res, 'Project not found');
 
     const data = UpdateProjectSchema.parse(req.body);
@@ -116,12 +150,13 @@ export async function updateProject(req, res) {
     const { data: project, error } = await supabase
       .from('projects')
       .update({ ...data, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .eq('org_id', orgId)
-      .select()
-      .single();
+      .eq('id', id).eq('org_id', orgId)
+      .select().single();
 
     if (error) throw error;
+
+    logAudit({ orgId, actorId: userId, action: 'project.updated', targetType: 'project', targetId: id, metadata: { title: existing.title, changes: Object.keys(data) } });
+
     return ok(res, project, 'Project updated');
   } catch (err) {
     if (err.name === 'ZodError') return badRequest(res, err.errors.map(e => e.message).join('; '));
@@ -132,7 +167,7 @@ export async function updateProject(req, res) {
 
 export async function deleteProject(req, res) {
   try {
-    const { orgId, role } = req.user;
+    const { orgId, role, id: userId } = req.user;
     const { id } = req.params;
 
     if (!['admin', 'super_admin', 'manager'].includes(role)) {
@@ -140,16 +175,20 @@ export async function deleteProject(req, res) {
     }
 
     const { data: existing } = await supabase
-      .from('projects').select('id').eq('id', id).eq('org_id', orgId).single();
+      .from('projects').select('id, title').eq('id', id).eq('org_id', orgId).single();
     if (!existing) return notFound(res, 'Project not found');
 
-    const job = await projectQueue.add('delete-project', {
-      type: 'delete',
-      data: { id },
-      orgId,
-    });
+    const queue = await getProjectQueue();
+    if (queue) {
+      const job = await queue.add('delete-project', { type: 'delete', data: { id }, orgId });
+      return ok(res, { jobId: job.id }, 'Project deletion queued');
+    }
 
-    return ok(res, { jobId: job.id }, 'Project deletion queued');
+    // Direct delete when Redis is disabled
+    await supabase.from('projects').delete().eq('id', id).eq('org_id', orgId);
+    logAudit({ orgId, actorId: userId, action: 'project.deleted', targetType: 'project', targetId: id, metadata: { title: existing.title } });
+
+    return ok(res, null, 'Project deleted');
   } catch (err) {
     logger.error('deleteProject error', { err: err.message });
     return serverError(res, err.message);
