@@ -2,14 +2,6 @@ import { supabase } from '../config/supabase.js';
 import { unauthorized, forbidden } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
 
-/**
- * Verify Supabase JWT, fetch profile + resolve org membership.
- *
- * RESILIENCE RULES:
- * - Platform owner ALWAYS gets super_admin + full access, regardless of DB state
- * - If memberships table doesn't exist, fall back to profiles.org_id
- * - Never block a valid JWT due to membership table issues
- */
 export async function authenticate(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
@@ -19,16 +11,14 @@ export async function authenticate(req, res, next) {
 
     const token = authHeader.replace('Bearer ', '').trim();
 
-    // Verify JWT with Supabase
     const { data: { user }, error } = await supabase.auth.getUser(token);
     if (error || !user) {
       return unauthorized(res, 'Invalid or expired token');
     }
 
-    // Fetch full profile
     const { data: profile, error: profileErr } = await supabase
       .from('profiles')
-      .select('id, email, name, role, org_id, power_level, is_platform_owner, display_id, account_type, onboarding_complete, status')
+      .select('id, email, name, role, role_id, org_id, power_level, is_platform_owner, display_id, account_type, onboarding_complete, status')
       .eq('id', user.id)
       .single();
 
@@ -36,14 +26,12 @@ export async function authenticate(req, res, next) {
       return unauthorized(res, 'User profile not found');
     }
 
-    // Block banned/disabled accounts (never block platform owner)
     if (!profile.is_platform_owner && (profile.status === 'banned' || profile.status === 'disabled')) {
       return unauthorized(res, 'Your account has been suspended');
     }
 
-    // ── PLATFORM OWNER: hardcoded full access, no membership check needed ──
+    // ── PLATFORM OWNER ────────────────────────────────────────
     if (profile.is_platform_owner) {
-      // Self-heal: if org_id is missing, try to find their org
       let orgId = profile.org_id;
       if (!orgId) {
         const { data: ownedOrg } = await supabase
@@ -54,21 +42,11 @@ export async function authenticate(req, res, next) {
           .order('created_at', { ascending: true })
           .limit(1)
           .maybeSingle();
-
         if (ownedOrg) {
           orgId = ownedOrg.id;
-          // Restore org_id on profile
           await supabase.from('profiles').update({ org_id: orgId }).eq('id', profile.id);
           logger.info('Platform owner org_id restored', { userId: profile.id, orgId });
         }
-      }
-
-      // Ensure membership exists (best-effort, non-blocking)
-      if (orgId) {
-        supabase.from('memberships')
-          .upsert({ user_id: profile.id, org_id: orgId, role: 'super_admin', status: 'active' }, { onConflict: 'user_id,org_id' })
-          .then(() => {})
-          .catch(() => {}); // non-blocking, memberships table may not exist yet
       }
 
       req.user = {
@@ -76,6 +54,7 @@ export async function authenticate(req, res, next) {
         email:              profile.email || user.email,
         name:               profile.name,
         role:               'super_admin',
+        roleId:             profile.role_id || null,
         orgId,
         powerLevel:         100,
         isPlatformOwner:    true,
@@ -87,36 +66,33 @@ export async function authenticate(req, res, next) {
       return next();
     }
 
-    // ── REGULAR USER: resolve org + membership ──
+    // ── REGULAR USER ──────────────────────────────────────────
     let resolvedOrgId  = profile.org_id;
     let resolvedRole   = profile.role   || 'client';
     let resolvedPower  = profile.power_level || 10;
     let membershipId   = null;
 
     if (resolvedOrgId) {
-      try {
-        const { data: membership } = await supabase
-          .from('memberships')
-          .select('id, role')
-          .eq('user_id', profile.id)
-          .eq('org_id', resolvedOrgId)
-          .eq('status', 'active')
-          .maybeSingle();
+      const { data: membership, error: memErr } = await supabase
+        .from('memberships')
+        .select('id, role')
+        .eq('user_id', profile.id)
+        .eq('org_id', resolvedOrgId)
+        .eq('status', 'active')
+        .maybeSingle();
 
-        if (membership) {
-          membershipId = membership.id;
-          resolvedRole = membership.role || resolvedRole;
-        } else {
-          // Auto-repair: create missing membership (non-blocking)
-          supabase.from('memberships')
-            .upsert({ user_id: profile.id, org_id: resolvedOrgId, role: resolvedRole, status: 'active' }, { onConflict: 'user_id,org_id' })
-            .select('id').single()
-            .then(({ data }) => { if (data) membershipId = data.id; })
-            .catch(() => {}); // non-blocking
-        }
-      } catch (membershipErr) {
-        // memberships table may not exist yet — fall back gracefully
-        logger.warn('Memberships table query failed, falling back to profile', { err: membershipErr.message });
+      if (memErr) {
+        logger.warn('Memberships query failed during auth', { err: memErr.message });
+        // If we can't verify membership, clear org access — fail secure
+        resolvedOrgId = null;
+      } else if (membership) {
+        membershipId = membership.id;
+        resolvedRole = membership.role || resolvedRole;
+      } else {
+        // No active membership found — clear org access
+        // Do NOT auto-repair: removed/banned users must not regain access silently
+        resolvedOrgId = null;
+        logger.info('No active membership found, clearing org access', { userId: profile.id });
       }
     }
 
@@ -125,6 +101,7 @@ export async function authenticate(req, res, next) {
       email:              profile.email || user.email,
       name:               profile.name,
       role:               resolvedRole,
+      roleId:             profile.role_id || null,
       orgId:              resolvedOrgId,
       powerLevel:         resolvedPower,
       isPlatformOwner:    false,
@@ -142,43 +119,17 @@ export async function authenticate(req, res, next) {
 }
 
 /**
- * Require org membership.
- * Verifies the user has an active membership in their current org — not just a profile.org_id.
- * Platform owners bypass this check.
+ * Require active org membership.
+ * Since authenticate already verified membership, this is a fast guard.
  */
-export async function requireOrg(req, res, next) {
+export function requireOrg(req, res, next) {
   if (req.user?.isPlatformOwner) return next();
-
-  const { orgId, id: userId } = req.user;
-  if (!orgId) {
+  if (!req.user?.orgId) {
     return forbidden(res, 'You must belong to an organization to perform this action');
   }
-
-  // Verify active membership — source of truth
-  try {
-    const { data: membership } = await supabase
-      .from('memberships')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('org_id', orgId)
-      .eq('status', 'active')
-      .maybeSingle();
-
-    if (!membership) {
-      return forbidden(res, 'You do not have an active membership in this organization');
-    }
-  } catch (err) {
-    logger.warn('requireOrg membership check failed', { err: err.message });
-    return forbidden(res, 'Organization access could not be verified');
-  }
-
   next();
 }
 
-/**
- * Require specific roles.
- * Platform owners always bypass this.
- */
 export function requireRole(...roles) {
   return (req, res, next) => {
     if (req.user?.isPlatformOwner) return next();
@@ -191,64 +142,58 @@ export function requireRole(...roles) {
 
 /**
  * Require platform owner access.
- * Checks both is_platform_owner flag AND platform_user_roles table as fallback.
+ * Uses manual two-step fetch to avoid implicit join issues.
  */
 export async function requirePlatformOwner(req, res, next) {
   if (req.user?.isPlatformOwner) return next();
 
-  // Fallback: check platform_user_roles table directly
   try {
     const { data: userRole } = await supabase
       .from('platform_user_roles')
-      .select('role_id, platform_roles(name)')
+      .select('role_id')
       .eq('user_id', req.user.id)
       .maybeSingle();
 
-    if (userRole) {
-      const roleName = userRole.platform_roles?.name;
-      if (roleName === 'Owner') {
-        // Patch req.user so downstream checks pass
+    if (userRole?.role_id) {
+      const { data: role } = await supabase
+        .from('platform_roles')
+        .select('name')
+        .eq('id', userRole.role_id)
+        .maybeSingle();
+
+      if (role?.name === 'Owner') {
         req.user.isPlatformOwner = true;
         return next();
       }
     }
   } catch (err) {
-    logger.warn('requirePlatformOwner fallback check failed', { err: err.message });
+    logger.warn('requirePlatformOwner check failed', { err: err.message });
   }
 
   return forbidden(res, 'Platform owner access required');
 }
 
 /**
- * RBAC: require a specific permission key.
- * Platform owners and super_admins bypass all permission checks.
+ * RBAC permission check.
+ * Uses role_id from req.user (set during authenticate) to avoid extra DB call.
  */
 export function requirePermission(permKey) {
   return async (req, res, next) => {
     try {
-      const { id: userId, role, isPlatformOwner, orgId } = req.user;
+      const { roleId, role, isPlatformOwner, orgId, id: userId } = req.user;
 
-      // Platform owner / super_admin bypass
-      if (isPlatformOwner || role === 'super_admin') return next();
+      if (isPlatformOwner || role === 'super_admin' || role === 'admin') return next();
 
-      // Fetch role_id from profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role_id')
-        .eq('id', userId)
-        .single();
-
-      if (!profile?.role_id) {
+      if (!roleId) {
         return forbidden(res, `Permission denied: ${permKey}`);
       }
 
-      // Check role_permissions table
       const { data: perm } = await supabase
         .from('role_permissions')
         .select('id')
-        .eq('role_id', profile.role_id)
+        .eq('role_id', roleId)
         .eq('permission_key', permKey)
-        .single();
+        .maybeSingle();
 
       if (!perm) {
         logger.warn('Permission denied', { userId, permKey, orgId });

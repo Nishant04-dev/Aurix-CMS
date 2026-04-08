@@ -14,14 +14,35 @@ export async function getRoles(req, res) {
   try {
     const { orgId } = req.user;
 
-    const { data, error } = await supabase
+    const { data: roles, error } = await supabase
       .from('roles')
-      .select('*, role_permissions(permission_key)')
+      .select('id, name, power_level, is_system, created_at, org_id')
       .eq('org_id', orgId)
       .order('power_level', { ascending: false });
 
     if (error) throw error;
-    return ok(res, data);
+    if (!roles?.length) return ok(res, []);
+
+    // Fetch permissions manually — no implicit join
+    const roleIds = roles.map(r => r.id);
+    const { data: perms } = await supabase
+      .from('role_permissions')
+      .select('role_id, permission_key')
+      .in('role_id', roleIds);
+
+    const permMap = {};
+    for (const p of perms ?? []) {
+      if (!permMap[p.role_id]) permMap[p.role_id] = {};
+      permMap[p.role_id][p.permission_key] = true;
+    }
+
+    const enriched = roles.map(r => ({
+      ...r,
+      permissions: permMap[r.id] ?? {},
+      role_permissions: (perms ?? []).filter(p => p.role_id === r.id),
+    }));
+
+    return ok(res, enriched);
   } catch (err) {
     logger.error('getRoles error', { err: err.message });
     return serverError(res, err.message);
