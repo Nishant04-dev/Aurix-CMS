@@ -81,23 +81,34 @@ export async function getUserOrganizations(req, res) {
     }
 
     // Regular user: query memberships
-    const { data, error } = await supabase
+    const { data: memberships, error } = await supabase
       .from('memberships')
-      .select('id, role, org_id, organizations(id, name, logo_url, plan, owner_id, status)')
+      .select('id, role, org_id')
       .eq('user_id', userId)
       .eq('status', 'active');
 
     if (error) throw error;
 
-    const orgs = (data ?? [])
-      .filter(m => m.organizations && ['approved', 'pending'].includes(m.organizations.status))
+    // Fetch orgs manually
+    const orgIds = (memberships ?? []).map(m => m.org_id).filter(Boolean);
+    let orgMap = {};
+    if (orgIds.length > 0) {
+      const { data: orgs } = await supabase
+        .from('organizations')
+        .select('id, name, logo_url, plan, owner_id, status')
+        .in('id', orgIds);
+      orgMap = Object.fromEntries((orgs ?? []).map(o => [o.id, o]));
+    }
+
+    const orgs = (memberships ?? [])
+      .filter(m => orgMap[m.org_id] && ['approved', 'pending'].includes(orgMap[m.org_id].status))
       .map(m => ({
         org_id:   m.org_id,
-        org_name: m.organizations.name,
-        org_logo: m.organizations.logo_url,
-        org_plan: m.organizations.plan,
+        org_name: orgMap[m.org_id]?.name,
+        org_logo: orgMap[m.org_id]?.logo_url,
+        org_plan: orgMap[m.org_id]?.plan,
         role:     m.role,
-        is_owner: m.organizations.owner_id === userId,
+        is_owner: orgMap[m.org_id]?.owner_id === userId,
       }));
 
     return ok(res, orgs);

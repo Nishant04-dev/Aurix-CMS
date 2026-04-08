@@ -149,24 +149,52 @@ export async function getMyInvitations(req, res) {
   try {
     const { id: userId } = req.user;
 
-    // Received invitations
-    const { data: received, error: recErr } = await supabase
-      .from('invitations')
-      .select('*, org:organizations(name, logo_url), inviterProfile:profiles!invitations_invited_by_fkey(name, email)')
-      .eq('target_user_id', userId)
-      .order('created_at', { ascending: false });
-    if (recErr) throw recErr;
+    // Fetch received and sent invitations (no joins)
+    const [receivedRes, sentRes] = await Promise.all([
+      supabase.from('invitations').select('*').eq('target_user_id', userId).order('created_at', { ascending: false }),
+      supabase.from('invitations').select('*').eq('invited_by', userId).order('created_at', { ascending: false }),
+    ]);
+    if (receivedRes.error) throw receivedRes.error;
+    if (sentRes.error) throw sentRes.error;
 
-    // Sent invitations
-    const { data: sent, error: sentErr } = await supabase
-      .from('invitations')
-      .select('*, targetProfile:profiles!invitations_target_user_id_fkey(name, email, display_id)')
-      .eq('invited_by', userId)
-      .order('created_at', { ascending: false });
-    if (sentErr) throw sentErr;
+    const received = receivedRes.data ?? [];
+    const sent = sentRes.data ?? [];
 
-    return ok(res, { received: received ?? [], sent: sent ?? [] });
+    // Collect all org IDs and user IDs for manual enrichment
+    const orgIds = [...new Set([
+      ...received.map(i => i.org_id),
+      ...sent.map(i => i.org_id),
+    ].filter(Boolean))];
+
+    const userIds = [...new Set([
+      ...received.map(i => i.invited_by),
+      ...sent.map(i => i.target_user_id),
+    ].filter(Boolean))];
+
+    // Fetch orgs and profiles separately
+    const [orgsRes, profilesRes] = await Promise.all([
+      orgIds.length > 0 ? supabase.from('organizations').select('id, name, logo_url').in('id', orgIds) : { data: [] },
+      userIds.length > 0 ? supabase.from('profiles').select('id, name, email, display_id').in('id', userIds) : { data: [] },
+    ]);
+
+    const orgMap = Object.fromEntries((orgsRes.data ?? []).map(o => [o.id, o]));
+    const profileMap = Object.fromEntries((profilesRes.data ?? []).map(p => [p.id, p]));
+
+    const enrichedReceived = received.map(i => ({
+      ...i,
+      org: orgMap[i.org_id] ?? null,
+      inviterProfile: profileMap[i.invited_by] ?? null,
+    }));
+
+    const enrichedSent = sent.map(i => ({
+      ...i,
+      org: orgMap[i.org_id] ?? null,
+      targetProfile: profileMap[i.target_user_id] ?? null,
+    }));
+
+    return ok(res, { received: enrichedReceived, sent: enrichedSent });
   } catch (err) {
+    logger.error('getMyInvitations error', { err: err.message });
     return serverError(res, err.message);
   }
 }

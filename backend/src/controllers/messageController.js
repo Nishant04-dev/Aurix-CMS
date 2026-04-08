@@ -29,15 +29,25 @@ export async function getMessages(req, res) {
       }
     }
 
-    const { data, error } = await supabase
+    const { data: messages, error } = await supabase
       .from('messages')
-      .select('*, profiles(id, name, avatar_url)')
+      .select('*')
       .eq('project_id', project_id)
       .eq('org_id', orgId)
       .order('created_at', { ascending: true });
 
     if (error) throw error;
-    return ok(res, data ?? []);
+
+    // Enrich with sender profiles manually
+    const senderIds = [...new Set((messages ?? []).map(m => m.sender_id).filter(Boolean))];
+    let profileMap = {};
+    if (senderIds.length > 0) {
+      const { data: profiles } = await supabase.from('profiles').select('id, name, avatar_url').in('id', senderIds);
+      profileMap = Object.fromEntries((profiles ?? []).map(p => [p.id, p]));
+    }
+    const enriched = (messages ?? []).map(m => ({ ...m, profiles: profileMap[m.sender_id] ?? null }));
+
+    return ok(res, enriched);
   } catch (err) {
     logger.error('getMessages error', { err: err.message });
     return serverError(res, err.message);
@@ -69,11 +79,14 @@ export async function sendMessage(req, res) {
     const { data: message, error } = await supabase
       .from('messages')
       .insert({ content, sender_id: userId, project_id, org_id: orgId })
-      .select('*, profiles(id, name, avatar_url)')
+      .select('*')
       .single();
 
     if (error) throw error;
-    return created(res, message, 'Message sent');
+
+    // Enrich with sender profile
+    const { data: profile } = await supabase.from('profiles').select('id, name, avatar_url').eq('id', userId).maybeSingle();
+    return created(res, { ...message, profiles: profile ?? null }, 'Message sent');
   } catch (err) {
     if (err.name === 'ZodError') return badRequest(res, err.errors.map(e => e.message).join('; '));
     logger.error('sendMessage error', { err: err.message });

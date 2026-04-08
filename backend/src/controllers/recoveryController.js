@@ -82,8 +82,17 @@ export async function getPlatformOwnerStatus(req, res) {
 
     const { data: memberships } = await supabase
       .from('memberships')
-      .select('id, org_id, role, status, organizations(name, status)')
+      .select('id, org_id, role, status')
       .eq('user_id', userId);
+
+    // Enrich with org data manually
+    const orgIds = [...new Set((memberships ?? []).map(m => m.org_id).filter(Boolean))];
+    let orgMap = {};
+    if (orgIds.length > 0) {
+      const { data: orgs } = await supabase.from('organizations').select('id, name, status').in('id', orgIds);
+      orgMap = Object.fromEntries((orgs ?? []).map(o => [o.id, o]));
+    }
+    const enrichedMemberships = (memberships ?? []).map(m => ({ ...m, organizations: orgMap[m.org_id] ?? null }));
 
     const issues = [];
     if (profile?.role !== 'super_admin')  issues.push('role is not super_admin');
@@ -91,10 +100,10 @@ export async function getPlatformOwnerStatus(req, res) {
     if (!profile?.is_platform_owner)      issues.push('is_platform_owner is false');
     if (!profile?.org_id)                 issues.push('no org_id set');
 
-    const activeMembership = memberships?.find(m => m.org_id === profile?.org_id && m.status === 'active');
+    const activeMembership = enrichedMemberships?.find(m => m.org_id === profile?.org_id && m.status === 'active');
     if (profile?.org_id && !activeMembership) issues.push('no active membership for current org');
 
-    return ok(res, { profile, memberships: memberships ?? [], issues });
+    return ok(res, { profile, memberships: enrichedMemberships, issues });
   } catch (err) {
     logger.error('getPlatformOwnerStatus error', { err: err.message });
     return serverError(res, err.message);

@@ -52,12 +52,21 @@ export async function setPlatformOrgStatus(req, res) {
 
 export async function getSubscriptions(req, res) {
   try {
-    const { data, error } = await supabase
+    const { data: subs, error } = await supabase
       .from('subscriptions')
-      .select('*, organizations(id, name, plan, owner_id)')
+      .select('*')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return ok(res, data ?? []);
+
+    const orgIds = [...new Set((subs ?? []).map(s => s.org_id).filter(Boolean))];
+    let orgMap = {};
+    if (orgIds.length > 0) {
+      const { data: orgs } = await supabase.from('organizations').select('id, name, plan, owner_id').in('id', orgIds);
+      orgMap = Object.fromEntries((orgs ?? []).map(o => [o.id, o]));
+    }
+
+    const enriched = (subs ?? []).map(s => ({ ...s, organizations: orgMap[s.org_id] ?? null }));
+    return ok(res, enriched);
   } catch (err) {
     logger.error('getSubscriptions error', { err: err.message });
     return serverError(res, err.message);
@@ -196,14 +205,21 @@ export async function removePlatformMember(req, res) {
 export async function getSupportConversations(req, res) {
   try {
     const { org_id } = req.query;
-    let query = supabase.from('support_conversations')
-      .select('*, organizations(name)')
-      .order('updated_at', { ascending: false });
+    let query = supabase.from('support_conversations').select('*').order('updated_at', { ascending: false });
     if (org_id) query = query.eq('org_id', org_id);
 
-    const { data, error } = await query;
+    const { data: convs, error } = await query;
     if (error) throw error;
-    return ok(res, data ?? []);
+
+    const orgIds = [...new Set((convs ?? []).map(c => c.org_id).filter(Boolean))];
+    let orgMap = {};
+    if (orgIds.length > 0) {
+      const { data: orgs } = await supabase.from('organizations').select('id, name').in('id', orgIds);
+      orgMap = Object.fromEntries((orgs ?? []).map(o => [o.id, o]));
+    }
+
+    const enriched = (convs ?? []).map(c => ({ ...c, organizations: orgMap[c.org_id] ?? null }));
+    return ok(res, enriched);
   } catch (err) {
     logger.error('getSupportConversations error', { err: err.message });
     return serverError(res, err.message);
