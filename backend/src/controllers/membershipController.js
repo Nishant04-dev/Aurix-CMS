@@ -212,23 +212,32 @@ export async function getBannedMembers(req, res) {
   try {
     const { orgId } = req.user;
 
-    const { data, error } = await supabase
+    const { data: bans, error } = await supabase
       .from('banned_members')
-      .select('id, user_id, org_id, banned_by, reason, created_at, profiles!banned_members_user_id_fkey(name, email)')
+      .select('id, user_id, org_id, banned_by, reason, created_at')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
-    return ok(res, (data || []).map(b => ({
+    // Fetch profiles manually
+    const userIds = [...new Set((bans ?? []).map(b => b.user_id).filter(Boolean))];
+    let profileMap = {};
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles').select('id, name, email').in('id', userIds);
+      profileMap = Object.fromEntries((profiles ?? []).map(p => [p.id, p]));
+    }
+
+    return ok(res, (bans ?? []).map(b => ({
       id:        b.id,
       userId:    b.user_id,
       orgId:     b.org_id,
       bannedBy:  b.banned_by,
       reason:    b.reason,
       createdAt: b.created_at,
-      name:      b.profiles?.name,
-      email:     b.profiles?.email,
+      name:      profileMap[b.user_id]?.name  || 'Unknown',
+      email:     profileMap[b.user_id]?.email || '',
     })));
   } catch (err) {
     logger.error('getBannedMembers error', { err: err.message });

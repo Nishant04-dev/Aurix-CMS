@@ -15,14 +15,34 @@ export async function getUsers(req, res) {
 
     if (role === 'client') return forbidden(res, 'Access denied');
 
-    const { data, error } = await supabase
+    // Use memberships table for proper org isolation
+    const { data: memberships, error: memErr } = await supabase
+      .from('memberships')
+      .select('user_id, role')
+      .eq('org_id', orgId)
+      .eq('status', 'active');
+
+    if (memErr) throw memErr;
+    if (!memberships?.length) return ok(res, []);
+
+    const userIds = memberships.map(m => m.user_id);
+    const roleMap = Object.fromEntries(memberships.map(m => [m.user_id, m.role]));
+
+    const { data: profiles, error } = await supabase
       .from('profiles')
       .select('id, name, email, role, role_id, power_level, display_id, created_at')
-      .eq('org_id', orgId)
+      .in('id', userIds)
       .order('name');
 
     if (error) throw error;
-    return ok(res, data);
+
+    // Merge membership role (source of truth) with profile data
+    const users = (profiles ?? []).map(p => ({
+      ...p,
+      role: roleMap[p.id] || p.role,
+    }));
+
+    return ok(res, users);
   } catch (err) {
     logger.error('getUsers error', { err: err.message });
     return serverError(res, err.message);
