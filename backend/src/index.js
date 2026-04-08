@@ -7,6 +7,15 @@ import { logger } from './utils/logger.js';
 import { serverError } from './utils/response.js';
 import routes from './routes/index.js';
 
+// ── Startup validation ────────────────────────────────────────
+const REQUIRED_ENV = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'];
+const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missing.length) {
+  console.error(`[FATAL] Missing required env vars: ${missing.join(', ')}`);
+  console.error('[FATAL] Ensure backend/.env exists and contains these variables.');
+  process.exit(1);
+}
+
 const app  = express();
 const PORT = parseInt(process.env.PORT  || '25569');
 const HOST = process.env.HOST || '0.0.0.0';
