@@ -143,13 +143,35 @@ export async function authenticate(req, res, next) {
 
 /**
  * Require org membership.
- * Platform owners always bypass this.
+ * Verifies the user has an active membership in their current org — not just a profile.org_id.
+ * Platform owners bypass this check.
  */
-export function requireOrg(req, res, next) {
+export async function requireOrg(req, res, next) {
   if (req.user?.isPlatformOwner) return next();
-  if (!req.user?.orgId) {
+
+  const { orgId, id: userId } = req.user;
+  if (!orgId) {
     return forbidden(res, 'You must belong to an organization to perform this action');
   }
+
+  // Verify active membership — source of truth
+  try {
+    const { data: membership } = await supabase
+      .from('memberships')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('org_id', orgId)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (!membership) {
+      return forbidden(res, 'You do not have an active membership in this organization');
+    }
+  } catch (err) {
+    logger.warn('requireOrg membership check failed', { err: err.message });
+    // Non-fatal: fall through if memberships table has issues
+  }
+
   next();
 }
 

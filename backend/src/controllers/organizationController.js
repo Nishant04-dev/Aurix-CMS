@@ -54,33 +54,12 @@ export async function updateOrganization(req, res) {
   }
 }
 
-/**
- * Returns all orgs the user has an active membership in.
- * Uses the memberships table — not invitations.
- */
 export async function getUserOrganizations(req, res) {
   try {
-    const { id: userId, isPlatformOwner } = req.user;
+    const { id: userId } = req.user;
 
-    // Platform owner: return all approved orgs
-    if (isPlatformOwner) {
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('id, name, logo_url, plan, owner_id')
-        .in('status', ['approved', 'pending'])
-        .order('name');
-      if (error) throw error;
-      return ok(res, (data ?? []).map(o => ({
-        org_id:   o.id,
-        org_name: o.name,
-        org_logo: o.logo_url,
-        org_plan: o.plan,
-        role:     'super_admin',
-        is_owner: o.owner_id === userId,
-      })));
-    }
-
-    // Regular user: ONLY active memberships — strict isolation
+    // ALL users (including platform owner) only see orgs they have active memberships in.
+    // Platform-wide org management belongs in the /platform/* routes, not here.
     const { data: memberships, error } = await supabase
       .from('memberships')
       .select('id, role, org_id')
@@ -94,18 +73,17 @@ export async function getUserOrganizations(req, res) {
 
     if (!memberships?.length) return ok(res, []);
 
-    // Fetch orgs manually
     const orgIds = memberships.map(m => m.org_id);
     const { data: orgs } = await supabase
       .from('organizations')
       .select('id, name, logo_url, plan, owner_id, status')
       .in('id', orgIds)
-      .in('status', ['approved', 'pending']); // only active orgs
+      .in('status', ['approved', 'pending']);
 
     const orgMap = Object.fromEntries((orgs ?? []).map(o => [o.id, o]));
 
     const result = memberships
-      .filter(m => orgMap[m.org_id]) // only orgs that passed the status filter
+      .filter(m => orgMap[m.org_id])
       .map(m => ({
         org_id:   m.org_id,
         org_name: orgMap[m.org_id].name,
