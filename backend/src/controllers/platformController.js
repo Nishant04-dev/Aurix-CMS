@@ -338,13 +338,29 @@ export async function getPlatformPermissions(req, res) {
 
 export async function getPlatformAuditLogs(req, res) {
   try {
-    const { data, error } = await supabase
+    const { data: logs, error } = await supabase
       .from('audit_logs')
-      .select('id, action, actor_id, created_at, entity, metadata, org_id')
+      .select('id, action, actor_id, created_at, entity, entity_id, metadata, org_id')
       .order('created_at', { ascending: false })
       .limit(50);
     if (error) throw error;
-    return ok(res, data ?? []);
+
+    // Fetch actor profiles manually
+    const actorIds = [...new Set((logs ?? []).map(l => l.actor_id).filter(Boolean))];
+    let profileMap = {};
+    if (actorIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles').select('id, name, email').in('id', actorIds);
+      profileMap = Object.fromEntries((profiles ?? []).map(p => [p.id, p]));
+    }
+
+    const enriched = (logs ?? []).map(l => ({
+      ...l,
+      actor_name:  profileMap[l.actor_id]?.name  || 'Unknown',
+      actor_email: profileMap[l.actor_id]?.email || '',
+    }));
+
+    return ok(res, enriched);
   } catch (err) {
     logger.error('getPlatformAuditLogs error', { err: err.message });
     return serverError(res, err.message);

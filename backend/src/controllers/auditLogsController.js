@@ -1,10 +1,10 @@
 import { supabase } from '../config/supabase.js';
-import { ok, forbidden, serverError } from '../utils/response.js';
+import { ok, badRequest, forbidden, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
 
 export async function getAuditLogs(req, res) {
   try {
-    const { id: userId, orgId, role } = req.user;
+    const { orgId, role } = req.user;
 
     if (!['admin', 'super_admin'].includes(role)) {
       return forbidden(res, 'Audit logs are only accessible to admins');
@@ -19,12 +19,12 @@ export async function getAuditLogs(req, res) {
       limit: rawLimit = 50,
     } = req.query;
 
-    const limit = Math.min(parseInt(rawLimit) || 50, 200);
+    const limit  = Math.min(parseInt(rawLimit) || 50, 200);
     const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
 
     let query = supabase
       .from('audit_logs')
-      .select('*, profiles!audit_logs_actor_id_fkey(name, email)', { count: 'exact' })
+      .select('*', { count: 'exact' })
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
@@ -34,19 +34,30 @@ export async function getAuditLogs(req, res) {
     if (from)     query = query.gte('created_at', from);
     if (to)       query = query.lte('created_at', to);
 
-    const { data, error, count } = await query;
+    const { data: logs, error, count } = await query;
     if (error) throw error;
 
-    const entries = (data || []).map(row => ({
+    // Fetch actor profiles manually — no joins
+    const actorIds = [...new Set((logs ?? []).map(l => l.actor_id).filter(Boolean))];
+    let profileMap = {};
+    if (actorIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, email')
+        .in('id', actorIds);
+      profileMap = Object.fromEntries((profiles ?? []).map(p => [p.id, p]));
+    }
+
+    const entries = (logs ?? []).map(row => ({
       id:          row.id,
       org_id:      row.org_id,
       actor_id:    row.actor_id,
-      actor_name:  row.profiles?.name || 'Unknown',
-      actor_email: row.profiles?.email || '',
+      actor_name:  profileMap[row.actor_id]?.name  || 'Unknown',
+      actor_email: profileMap[row.actor_id]?.email || '',
       action:      row.action,
-      target_type: row.target_type,
-      target_id:   row.target_id,
-      metadata:    row.metadata,
+      entity:      row.entity    || null,
+      entity_id:   row.entity_id || null,
+      metadata:    row.metadata  || {},
       created_at:  row.created_at,
     }));
 
@@ -62,12 +73,11 @@ export async function writeAuditLog(req, res) {
     const { id: userId, orgId } = req.user;
     const { action, entity, entityId, metadata = {} } = req.body;
 
-    if (!action) return (await import('../utils/response.js')).badRequest(res, 'action is required');
+    if (!action) return badRequest(res, 'action is required');
 
     const { error } = await supabase.from('audit_logs').insert({
       org_id:    orgId    || null,
       actor_id:  userId,
-      user_id:   userId,
       action,
       entity:    entity   || null,
       entity_id: entityId || null,
