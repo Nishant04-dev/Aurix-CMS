@@ -7,8 +7,10 @@ export function useLeaveOrganization() {
   return useMutation({
     mutationFn: () => api.post<{ nextOrgId: string | null }>('/members/leave'),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['team'] });
-      queryClient.invalidateQueries({ queryKey: ['user_orgs'] });
+      // Remove (not just invalidate) so stale data never shows
+      queryClient.removeQueries({ queryKey: ['team'] });
+      queryClient.removeQueries({ queryKey: ['user_orgs'] });
+      queryClient.removeQueries({ queryKey: ['org_settings'] });
     },
   });
 }

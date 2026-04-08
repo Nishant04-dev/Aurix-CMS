@@ -80,38 +80,42 @@ export async function getUserOrganizations(req, res) {
       })));
     }
 
-    // Regular user: query memberships
+    // Regular user: ONLY active memberships — strict isolation
     const { data: memberships, error } = await supabase
       .from('memberships')
       .select('id, role, org_id')
       .eq('user_id', userId)
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .not('org_id', 'is', null);
 
     if (error) throw error;
 
-    // Fetch orgs manually
-    const orgIds = (memberships ?? []).map(m => m.org_id).filter(Boolean);
-    let orgMap = {};
-    if (orgIds.length > 0) {
-      const { data: orgs } = await supabase
-        .from('organizations')
-        .select('id, name, logo_url, plan, owner_id, status')
-        .in('id', orgIds);
-      orgMap = Object.fromEntries((orgs ?? []).map(o => [o.id, o]));
-    }
+    logger.info('getUserOrganizations', { userId, membershipCount: memberships?.length ?? 0 });
 
-    const orgs = (memberships ?? [])
-      .filter(m => orgMap[m.org_id] && ['approved', 'pending'].includes(orgMap[m.org_id].status))
+    if (!memberships?.length) return ok(res, []);
+
+    // Fetch orgs manually
+    const orgIds = memberships.map(m => m.org_id);
+    const { data: orgs } = await supabase
+      .from('organizations')
+      .select('id, name, logo_url, plan, owner_id, status')
+      .in('id', orgIds)
+      .in('status', ['approved', 'pending']); // only active orgs
+
+    const orgMap = Object.fromEntries((orgs ?? []).map(o => [o.id, o]));
+
+    const result = memberships
+      .filter(m => orgMap[m.org_id]) // only orgs that passed the status filter
       .map(m => ({
         org_id:   m.org_id,
-        org_name: orgMap[m.org_id]?.name,
-        org_logo: orgMap[m.org_id]?.logo_url,
-        org_plan: orgMap[m.org_id]?.plan,
+        org_name: orgMap[m.org_id].name,
+        org_logo: orgMap[m.org_id].logo_url,
+        org_plan: orgMap[m.org_id].plan,
         role:     m.role,
-        is_owner: orgMap[m.org_id]?.owner_id === userId,
+        is_owner: orgMap[m.org_id].owner_id === userId,
       }));
 
-    return ok(res, orgs);
+    return ok(res, result);
   } catch (err) {
     logger.error('getUserOrganizations error', { err: err.message });
     return serverError(res, err.message);

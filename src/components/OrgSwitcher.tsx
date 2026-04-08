@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { ChevronDown, Check, Loader2, Building2 } from 'lucide-react';
@@ -27,12 +27,16 @@ export function OrgSwitcher() {
   const { orgId, refreshUser } = useAuth();
   const { settings } = useOrgSettings();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [switching, setSwitching] = useState(false);
 
   const { data: orgs = [] } = useQuery<OrgOption[]>({
     queryKey: ['user_orgs'],
     queryFn: () => api.get<OrgOption[]>('/organizations/mine'),
-    staleTime: 60_000,
+    staleTime: 0,          // always fetch fresh — security critical
+    gcTime: 0,             // don't keep in cache after unmount
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
     retry: false,
   });
 
@@ -52,6 +56,9 @@ export function OrgSwitcher() {
     setSwitching(true);
     try {
       await api.post('/organizations/switch', { org_id: org.org_id });
+      // Invalidate all org-related caches before refreshing
+      queryClient.removeQueries({ queryKey: ['user_orgs'] });
+      queryClient.removeQueries({ queryKey: ['org_settings'] });
       await refreshUser();
       toast({ title: `Switched to ${org.org_name}` });
       window.location.reload();
