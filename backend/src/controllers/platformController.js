@@ -130,7 +130,7 @@ export async function getPlatformTeam(req, res) {
 
     // Manually fetch profiles for each user_id to avoid implicit join issues
     const userIds = [...new Set(members.map(m => m.user_id).filter(Boolean))];
-    let profileMap: Record<string, any> = {};
+    let profileMap = {};
 
     if (userIds.length > 0) {
       const { data: profiles, error: profilesErr } = await supabase
@@ -346,7 +346,7 @@ export async function getAllUsers(req, res) {
     if (error) throw error;
 
     const orgIds = [...new Set((data ?? []).map(u => u.org_id).filter(Boolean))];
-    let orgMap: Record<string, string> = {};
+    let orgMap = {};
 
     if (orgIds.length > 0) {
       const { data: orgs, error: orgsErr } = await supabase
