@@ -35,9 +35,14 @@ export async function createInvoice(req, res) {
       .from('clients').select('id').eq('id', data.client_id).eq('org_id', orgId).single();
     if (!client) return badRequest(res, 'Client not found in your organization');
 
+    // Fetch org currency
+    const { data: org } = await supabase
+      .from('organizations').select('currency').eq('id', orgId).single();
+    const currency = org?.currency || 'INR';
+
     const queue = await getInvoiceQueue();
     if (queue) {
-      const job = await queue.add('create-invoice', { type: 'create', data, orgId, userId });
+      const job = await queue.add('create-invoice', { type: 'create', data: { ...data, currency }, orgId, userId });
       return created(res, { jobId: job.id }, 'Invoice creation queued');
     }
 
@@ -45,12 +50,13 @@ export async function createInvoice(req, res) {
     const { data: invoice, error } = await supabase
       .from('invoices')
       .insert({
-        client_id: data.client_id,
-        amount:    data.amount,
-        due_date:  data.due_date,
-        status:    data.status,
-        org_id:    orgId,
+        client_id:  data.client_id,
+        amount:     data.amount,
+        due_date:   data.due_date,
+        status:     data.status,
+        org_id:     orgId,
         created_by: userId,
+        currency,
       })
       .select().single();
 

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePlan } from '@/hooks/use-plan';
+import { useOrgCurrency } from '@/hooks/use-org-currency';
 import { PLANS, type PlanId } from '@/lib/plans';
-import { formatCurrency } from '@/lib/currency';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -57,6 +57,7 @@ const PLAN_FEATURES: Record<PlanId, string[]> = {
 
 export default function Billing() {
   const { plan, planName, maxMembers, maxClients } = usePlan();
+  const { fmt } = useOrgCurrency();
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [targetPlan, setTargetPlan] = useState<PlanId | null>(null);
@@ -84,7 +85,7 @@ export default function Billing() {
           <div>
             <p className="text-2xl font-bold text-foreground">{planName}</p>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {plan === 'free' ? 'Free forever' : plan === 'pro' ? `${formatCurrency(199)}/month` : `${formatCurrency(599)}/month`}
+              {plan === 'free' ? 'Free forever' : plan === 'pro' ? `${fmt(199)}/month` : `${fmt(599)}/month`}
             </p>
           </div>
           <div className="flex gap-4 text-sm">
@@ -118,7 +119,7 @@ export default function Billing() {
                 </div>
                 <div>
                   <p className="font-bold text-foreground">{p.name}</p>
-                  <p className="text-sm text-muted-foreground">{p.price === 0 ? 'Free' : `${formatCurrency(p.price)}/mo`}</p>
+                  <p className="text-sm text-muted-foreground">{p.price === 0 ? 'Free' : `${fmt(p.price)}/mo`}</p>
                 </div>
               </div>
 
