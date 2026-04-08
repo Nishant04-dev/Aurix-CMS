@@ -14,7 +14,7 @@ import { sendInvitation, respondToInvitation, getMyInvitations, lookupUserByDisp
 import { createInvoice, getInvoices, updateInvoice, cancelInvoice, deleteInvoice } from '../controllers/invoiceController.js';
 import { getClients, createClient, updateClient, deleteClient }      from '../controllers/clientController.js';
 import { getUsers, updateUser, deleteUser }                          from '../controllers/userController.js';
-import { getRoles, createRole, updateRole }                          from '../controllers/roleController.js';
+import { getRoles, createRole, updateRole, deleteRole }                          from '../controllers/roleController.js';
 import { leaveOrganization, removeMember, banMember, unbanMember, getBannedMembers } from '../controllers/membershipController.js';
 import { getAuditLogs, writeAuditLog }                               from '../controllers/auditLogsController.js';
 import { createChannel, deleteChannel, addChannelMember, removeChannelMember, getChannels, sendMessage as sendChatMessage, getMessages as getChatMessages } from '../controllers/chatController.js';
@@ -90,6 +90,7 @@ router.delete('/invoices/:id',          requireOrg, writeLimiter, deleteInvoice)
 router.get   ('/roles',           requireOrg, requirePermission('manage_roles'), getRoles);
 router.post  ('/roles',           requireOrg, writeLimiter, requirePermission('manage_roles'), createRole);
 router.patch ('/roles/:id',       requireOrg, writeLimiter, requirePermission('manage_roles'), updateRole);
+router.delete('/roles/:id',       requireOrg, writeLimiter, requireRole('admin', 'super_admin'), deleteRole);
 
 // ── Team / Users ──────────────────────────────────────────────
 router.get   ('/users',           requireOrg, requirePermission('manage_users'), getUsers);

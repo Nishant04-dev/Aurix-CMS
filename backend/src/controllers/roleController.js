@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { supabase } from '../config/supabase.js';
 import { ok, created, badRequest, forbidden, notFound, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
+import { logAudit } from '../utils/auditLogger.js';
 
 const RoleSchema = z.object({
   name:        z.string().min(1).max(100),
@@ -108,6 +109,62 @@ export async function updateRole(req, res) {
   } catch (err) {
     if (err.name === 'ZodError') return badRequest(res, err.errors.map(e => e.message).join('; '));
     logger.error('updateRole error', { err: err.message });
+    return serverError(res, err.message);
+  }
+}
+
+export async function deleteRole(req, res) {
+  try {
+    const { orgId, id: userId, role: requesterRole, powerLevel: requesterPower, isPlatformOwner } = req.user;
+    const { id } = req.params;
+
+    // Only admin / super_admin / platform owner can delete roles
+    if (!isPlatformOwner && !['admin', 'super_admin'].includes(requesterRole)) {
+      return forbidden(res, 'Only admins can delete roles');
+    }
+
+    // Fetch the role — must belong to this org
+    const { data: existing } = await supabase
+      .from('roles')
+      .select('id, name, power_level, is_system')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (!existing) return notFound(res, 'Role not found');
+
+    // Block system roles
+    if (existing.is_system) {
+      return forbidden(res, 'System roles cannot be deleted');
+    }
+
+    // Block deleting a role with equal or higher power (unless super_admin / platform owner)
+    if (!isPlatformOwner && requesterRole !== 'super_admin' && existing.power_level >= requesterPower) {
+      return forbidden(res, 'Cannot delete a role with equal or higher power level than your own');
+    }
+
+    // Block if any user currently has this role assigned
+    const { count } = await supabase
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('role_id', id)
+      .eq('org_id', orgId);
+
+    if ((count ?? 0) > 0) {
+      return badRequest(res, `Role is in use by ${count} user${count === 1 ? '' : 's'}. Reassign them before deleting.`);
+    }
+
+    // Delete permissions first, then the role
+    await supabase.from('role_permissions').delete().eq('role_id', id);
+    const { error } = await supabase.from('roles').delete().eq('id', id).eq('org_id', orgId);
+    if (error) throw error;
+
+    logAudit({ orgId, actorId: userId, action: 'role.deleted', targetType: 'role', targetId: id, metadata: { name: existing.name } });
+    logger.info('Role deleted', { roleId: id, orgId, deletedBy: userId });
+
+    return ok(res, null, `Role "${existing.name}" deleted`);
+  } catch (err) {
+    logger.error('deleteRole error', { err: err.message });
     return serverError(res, err.message);
   }
 }
