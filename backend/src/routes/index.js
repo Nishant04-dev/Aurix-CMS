@@ -11,7 +11,7 @@ import { getMessages, sendMessage, getLastMessages }               from '../cont
 import { registerFile, deleteFile }                                  from '../controllers/fileController.js';
 import { uploadFile, getPublicUrl, createSignedUrl, deleteFile as deleteStorageFile } from '../controllers/storageController.js';
 import { sendInvitation, respondToInvitation, getMyInvitations, lookupUserByDisplayId } from '../controllers/invitationController.js';
-import { createInvoice, getInvoices }                                from '../controllers/invoiceController.js';
+import { createInvoice, getInvoices, updateInvoice, cancelInvoice, deleteInvoice } from '../controllers/invoiceController.js';
 import { getClients, createClient, updateClient, deleteClient }      from '../controllers/clientController.js';
 import { getUsers, updateUser, deleteUser }                          from '../controllers/userController.js';
 import { getRoles, createRole, updateRole }                          from '../controllers/roleController.js';
@@ -80,8 +80,11 @@ router.post  ('/files/upload',    requireOrg, writeLimiter, requirePermission('u
 router.delete('/files/:file_id',  requireOrg, writeLimiter, deleteFile);
 
 // ── Invoices ──────────────────────────────────────────────────
-router.get   ('/invoices',        requireOrg, getInvoices);
-router.post  ('/invoices',        requireOrg, writeLimiter, createInvoice);
+router.get   ('/invoices',              requireOrg, getInvoices);
+router.post  ('/invoices',              requireOrg, writeLimiter, createInvoice);
+router.patch ('/invoices/:id',          requireOrg, writeLimiter, updateInvoice);
+router.patch ('/invoices/:id/cancel',   requireOrg, writeLimiter, cancelInvoice);
+router.delete('/invoices/:id',          requireOrg, writeLimiter, deleteInvoice);
 
 // ── Roles ─────────────────────────────────────────────────────
 router.get   ('/roles',           requireOrg, requirePermission('manage_roles'), getRoles);

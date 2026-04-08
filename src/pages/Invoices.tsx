@@ -58,7 +58,7 @@ export default function Invoices() {
   const { data: clients } = useClients();
   const { fmt } = useOrgCurrency();
   const { toast } = useToast();
-  const [confirmAction, setConfirmAction] = useState<{ id: string, status: InvoiceStatus } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ id: string, status: InvoiceStatus, type?: 'status' | 'delete' } | null>(null);
   
   const isClient = user?.role === 'client';
   const canManage = user?.role === 'admin' || user?.role === 'manager';
@@ -67,6 +67,16 @@ export default function Invoices() {
     try {
       await api.patch(`/invoices/${id}`, { status });
       toast({ title: 'Status Updated', description: `Invoice is now ${statusStyles[status].text}.` });
+      refetch();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api.delete(`/invoices/${id}`);
+      toast({ title: 'Invoice deleted' });
       refetch();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error', description: err.message });
@@ -120,10 +130,16 @@ export default function Invoices() {
           <DropdownMenuSeparator />
           <DropdownMenuItem 
             className="text-destructive focus:text-destructive" 
-            onClick={() => setConfirmAction({ id: invoice.id, status: 'cancelled' })}
+            onClick={() => setConfirmAction({ id: invoice.id, status: 'cancelled', type: 'status' })}
             disabled={invoice.status === 'cancelled'}
           >
             <XCircle className="h-4 w-4 mr-2" /> Cancel Invoice
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onClick={() => setConfirmAction({ id: invoice.id, status: 'cancelled', type: 'delete' })}
+          >
+            <XCircle className="h-4 w-4 mr-2" /> Delete Invoice
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -266,9 +282,11 @@ export default function Invoices() {
       <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel Invoice?</AlertDialogTitle>
+            <AlertDialogTitle>{confirmAction?.type === 'delete' ? 'Delete Invoice?' : 'Cancel Invoice?'}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will mark the invoice as cancelled. This should only be used for errors or voided transactions.
+              {confirmAction?.type === 'delete'
+                ? 'This will permanently delete the invoice and all its line items. This cannot be undone.'
+                : 'This will mark the invoice as cancelled. This should only be used for errors or voided transactions.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -277,12 +295,16 @@ export default function Invoices() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
                 if (confirmAction) {
-                  updateStatus(confirmAction.id, confirmAction.status);
+                  if (confirmAction.type === 'delete') {
+                    handleDelete(confirmAction.id);
+                  } else {
+                    updateStatus(confirmAction.id, confirmAction.status);
+                  }
                   setConfirmAction(null);
                 }
               }}
             >
-              Confirm Cancellation
+              {confirmAction?.type === 'delete' ? 'Delete Permanently' : 'Confirm Cancellation'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

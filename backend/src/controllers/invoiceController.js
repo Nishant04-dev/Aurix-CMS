@@ -110,3 +110,95 @@ export async function getInvoices(req, res) {
     return serverError(res, err.message);
   }
 }
+
+export async function updateInvoice(req, res) {
+  try {
+    const { orgId, id: userId, role } = req.user;
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!['admin', 'super_admin', 'manager'].includes(role)) {
+      return forbidden(res, 'Insufficient permissions to update invoices');
+    }
+
+    const VALID_STATUSES = ['pending', 'paid', 'overdue', 'on_hold', 'cancelled'];
+    if (status && !VALID_STATUSES.includes(status)) {
+      return badRequest(res, `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}`);
+    }
+
+    const { data: existing } = await supabase
+      .from('invoices').select('id').eq('id', id).eq('org_id', orgId).maybeSingle();
+    if (!existing) return notFound(res, 'Invoice not found');
+
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', id).eq('org_id', orgId)
+      .select().single();
+
+    if (error) throw error;
+
+    logAudit({ orgId, actorId: userId, action: 'invoice.updated', targetType: 'invoice', targetId: id, metadata: { status } });
+    return ok(res, invoice, 'Invoice updated');
+  } catch (err) {
+    logger.error('updateInvoice error', { err: err.message });
+    return serverError(res, err.message);
+  }
+}
+
+export async function cancelInvoice(req, res) {
+  try {
+    const { orgId, id: userId, role } = req.user;
+    const { id } = req.params;
+
+    if (!['admin', 'super_admin', 'manager'].includes(role)) {
+      return forbidden(res, 'Insufficient permissions to cancel invoices');
+    }
+
+    const { data: existing } = await supabase
+      .from('invoices').select('id, status').eq('id', id).eq('org_id', orgId).maybeSingle();
+    if (!existing) return notFound(res, 'Invoice not found');
+    if (existing.status === 'cancelled') return badRequest(res, 'Invoice is already cancelled');
+
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .eq('id', id).eq('org_id', orgId)
+      .select().single();
+
+    if (error) throw error;
+
+    logAudit({ orgId, actorId: userId, action: 'invoice.cancelled', targetType: 'invoice', targetId: id });
+    return ok(res, invoice, 'Invoice cancelled');
+  } catch (err) {
+    logger.error('cancelInvoice error', { err: err.message });
+    return serverError(res, err.message);
+  }
+}
+
+export async function deleteInvoice(req, res) {
+  try {
+    const { orgId, id: userId, role } = req.user;
+    const { id } = req.params;
+
+    if (!['admin', 'super_admin'].includes(role)) {
+      return forbidden(res, 'Only admins can delete invoices');
+    }
+
+    const { data: existing } = await supabase
+      .from('invoices').select('id').eq('id', id).eq('org_id', orgId).maybeSingle();
+    if (!existing) return notFound(res, 'Invoice not found');
+
+    // Delete line items first
+    await supabase.from('invoice_items').delete().eq('invoice_id', id);
+
+    const { error } = await supabase.from('invoices').delete().eq('id', id).eq('org_id', orgId);
+    if (error) throw error;
+
+    logAudit({ orgId, actorId: userId, action: 'invoice.deleted', targetType: 'invoice', targetId: id });
+    return ok(res, null, 'Invoice deleted');
+  } catch (err) {
+    logger.error('deleteInvoice error', { err: err.message });
+    return serverError(res, err.message);
+  }
+}
