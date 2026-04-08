@@ -134,7 +134,7 @@ router.patch('/notifications/:id/read', writeLimiter, markNotificationRead);
 router.post ('/notifications/read-all', writeLimiter, markAllRead);
 
 // ── Platform admin (org status) ───────────────────────────────
-router.post('/platform/org-status', writeLimiter, setOrgStatus);
+router.post('/platform/org-status', requirePlatformOwner, writeLimiter, setOrgStatus);
 
 // ── Onboarding ────────────────────────────────────────────────
 router.post('/onboarding/provision', writeLimiter, provisionOrganization);

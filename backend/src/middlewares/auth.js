@@ -169,7 +169,7 @@ export async function requireOrg(req, res, next) {
     }
   } catch (err) {
     logger.warn('requireOrg membership check failed', { err: err.message });
-    // Non-fatal: fall through if memberships table has issues
+    return forbidden(res, 'Organization access could not be verified');
   }
 
   next();

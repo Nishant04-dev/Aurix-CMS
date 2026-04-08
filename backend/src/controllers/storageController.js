@@ -26,7 +26,7 @@ export async function uploadFile(req, res) {
     ok(res, { path: data.path });
   } catch (err) {
     logger.error('Upload error', { err: err.message });
-    error(res, 'Upload failed');
+    serverError(res, 'Upload failed');
   }
 }
 
@@ -46,7 +46,7 @@ export async function getPublicUrl(req, res) {
     ok(res, { publicUrl: data.publicUrl });
   } catch (err) {
     logger.error('Get public URL error', { err: err.message });
-    error(res, 'Failed to get URL');
+    serverError(res, 'Failed to get URL');
   }
 }
 
@@ -85,7 +85,7 @@ export async function deleteFile(req, res) {
     const { bucket, paths } = req.body;
 
     if (!bucket || !paths || !Array.isArray(paths)) {
-      return error(res, 'Missing bucket or paths array');
+      return serverError(res, 'Missing bucket or paths array');
     }
 
     const { data, error: deleteError } = await supabase.storage
@@ -100,6 +100,6 @@ export async function deleteFile(req, res) {
     ok(res, { deleted: data });
   } catch (err) {
     logger.error('Delete file error', { err: err.message });
-    error(res, 'Delete failed');
+    serverError(res, 'Delete failed');
   }
 }
