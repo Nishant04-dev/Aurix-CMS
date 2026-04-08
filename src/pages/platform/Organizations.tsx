@@ -27,9 +27,14 @@ export default function PlatformOrganizations() {
   const { toast } = useToast();
 
   const load = async () => {
-    const data = await api.get('/platform/organizations');
-    setOrgs(data || []);
-    setLoading(false);
+    try {
+      const data = await api.get<any[]>('/platform/organizations');
+      setOrgs(data || []);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error loading organizations', description: err.message });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const setStatus = async (id: string, status: string) => {

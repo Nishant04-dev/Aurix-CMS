@@ -24,10 +24,15 @@ export default function PlatformTeam() {
   const { toast } = useToast();
 
   const load = async () => {
-    const { members, roles } = await api.get('/platform/team');
-    setMembers(members || []);
-    setRoles(roles || []);
-    setLoading(false);
+    try {
+      const res = await api.get<{ members: any[]; roles: any[] }>('/platform/team');
+      setMembers((res as any)?.members || []);
+      setRoles((res as any)?.roles || []);
+    } catch (err: any) {
+      console.error('Platform team load error:', err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);

@@ -25,13 +25,14 @@ export default function PlatformSubscriptions() {
   const { toast } = useToast();
 
   const load = async () => {
-    const { data, error } = await (supabase as any)
-      .from('subscriptions')
-      .select('*, organizations(id, name, plan, owner_id)')
-      .order('created_at', { ascending: false });
-    if (error) console.error('Load subs error:', error.message);
-    setSubs(data || []);
-    setLoading(false);
+    try {
+      const data = await api.get<any[]>('/platform/subscriptions');
+      setSubs(data || []);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error loading subscriptions', description: err.message });
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -39,28 +40,11 @@ export default function PlatformSubscriptions() {
   const upgradePlan = async (subId: string, orgId: string, plan: string) => {
     const key = subId + plan;
     setActionId(key);
-    console.log('UPGRADING PLAN:', orgId, plan);
     try {
-      // Update subscriptions table
-      const { error: subErr } = await supabase
-        .from('subscriptions')
-        .update({ plan, status: 'active' })
-        .eq('id', subId);
-      if (subErr) throw subErr;
-
-      // Sync plan to organizations table
-      const { data: orgData, error: orgErr } = await (supabase as any)
-        .from('organizations')
-        .update({ plan })
-        .eq('id', orgId)
-        .select();
-      console.log('Org update result:', orgData, orgErr);
-      if (orgErr) throw orgErr;
-
+      await api.patch(`/platform/subscriptions/${subId}`, { plan, status: 'active', org_id: orgId });
       toast({ title: 'Plan upgraded', description: `Plan updated to ${plan}` });
       await load();
     } catch (err: any) {
-      console.error('Upgrade error:', err);
       toast({ variant: 'destructive', title: 'Error', description: err.message });
     } finally {
       setActionId(null);
@@ -68,8 +52,7 @@ export default function PlatformSubscriptions() {
   };
 
   const setSubStatus = async (subId: string, status: string) => {
-    const key = subId + status;
-    setActionId(key);
+    setActionId(subId + status);
     try {
       await api.patch(`/platform/subscriptions/${subId}`, { status });
       toast({ title: 'Status updated', description: `Subscription ${status}` });

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { api } from '@/lib/apiClient';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,21 +22,23 @@ export default function PlatformSupport() {
   const { toast } = useToast();
 
   const loadConversations = async () => {
-    const { data, error } = await supabase
-      .from('support_conversations')
-      .select('*, organizations(name)')
-      .order('updated_at', { ascending: false });
-    if (!error) setConversations(data || []);
-    setLoading(false);
+    try {
+      const data = await api.get<any[]>('/platform/support');
+      setConversations(data || []);
+    } catch (err: any) {
+      console.error('loadConversations error:', err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadMessages = async (convId: string) => {
-    const { data } = await supabase
-      .from('support_messages')
-      .select('*')
-      .eq('conversation_id', convId)
-      .order('created_at', { ascending: true });
-    setMessages(data || []);
+    try {
+      const data = await api.get<any[]>('/platform/support/messages', { conversation_id: convId });
+      setMessages(data || []);
+    } catch {
+      setMessages([]);
+    }
     setTimeout(() => scrollRef.current?.scrollTo({ top: 9999, behavior: 'smooth' }), 100);
   };
 

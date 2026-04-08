@@ -68,13 +68,18 @@ export default function PlatformOverview() {
 
   useEffect(() => {
     const load = async () => {
-      const [statsRes, logsRes] = await Promise.all([
-        api.get('/platform/stats'),
-        api.get('/platform/audit-logs'),
-      ]);
-      setStats(statsRes as PlatformStats);
-      setLogs(logsRes);
-      setLoading(false);
+      try {
+        const [statsRes, logsRes] = await Promise.all([
+          api.get('/platform/stats'),
+          api.get('/platform/audit-logs'),
+        ]);
+        setStats(statsRes as PlatformStats);
+        setLogs((logsRes as AuditRow[]) || []);
+      } catch (err: any) {
+        console.error('Platform overview load error:', err.message);
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, []);
