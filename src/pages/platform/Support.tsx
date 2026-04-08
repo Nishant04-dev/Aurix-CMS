@@ -22,11 +22,13 @@ export default function PlatformSupport() {
   const { toast } = useToast();
 
   const loadConversations = async () => {
+    console.log('[Support] loadConversations() called');
     try {
       const data = await api.get<any[]>('/platform/support');
+      console.log('[Support] API response:', data);
       setConversations(data || []);
     } catch (err: any) {
-      console.error('loadConversations error:', err.message);
+      console.error('[Support] loadConversations error:', err.message);
     } finally {
       setLoading(false);
     }

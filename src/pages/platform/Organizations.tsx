@@ -27,15 +27,20 @@ export default function PlatformOrganizations() {
   const { toast } = useToast();
 
   const load = async () => {
+    console.log('[Organizations] load() called');
     try {
       const data = await api.get<any[]>('/platform/organizations');
+      console.log('[Organizations] API response:', data);
       setOrgs(data || []);
     } catch (err: any) {
+      console.error('[Organizations] load error:', err);
       toast({ variant: 'destructive', title: 'Error loading organizations', description: err.message });
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => { load(); }, []);
 
   const setStatus = async (id: string, status: string) => {
     setActionId(id + status);

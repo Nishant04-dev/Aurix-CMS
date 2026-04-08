@@ -25,10 +25,13 @@ export default function PlatformSubscriptions() {
   const { toast } = useToast();
 
   const load = async () => {
+    console.log('[Subscriptions] load() called');
     try {
       const data = await api.get<any[]>('/platform/subscriptions');
+      console.log('[Subscriptions] API response:', data);
       setSubs(data || []);
     } catch (err: any) {
+      console.error('[Subscriptions] load error:', err);
       toast({ variant: 'destructive', title: 'Error loading subscriptions', description: err.message });
     } finally {
       setLoading(false);

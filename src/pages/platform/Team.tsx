@@ -24,12 +24,14 @@ export default function PlatformTeam() {
   const { toast } = useToast();
 
   const load = async () => {
+    console.log('[Team] load() called');
     try {
       const res = await api.get<{ members: any[]; roles: any[] }>('/platform/team');
+      console.log('[Team] API response:', res);
       setMembers((res as any)?.members || []);
       setRoles((res as any)?.roles || []);
     } catch (err: any) {
-      console.error('Platform team load error:', err.message);
+      console.error('[Team] load error:', err.message);
     } finally {
       setLoading(false);
     }
