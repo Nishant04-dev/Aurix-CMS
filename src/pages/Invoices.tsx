@@ -17,7 +17,8 @@ import {
   CheckCircle, 
   PauseCircle, 
   XCircle, 
-  RefreshCcw 
+  RefreshCcw,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { InvoiceStatus } from '@/types';
@@ -61,7 +62,8 @@ export default function Invoices() {
   const [confirmAction, setConfirmAction] = useState<{ id: string, status: InvoiceStatus, type?: 'status' | 'delete' } | null>(null);
   
   const isClient = user?.role === 'client';
-  const canManage = user?.role === 'admin' || user?.role === 'manager';
+  const canManage = ['admin', 'super_admin', 'manager'].includes(user?.role ?? '') || user?.isPlatformOwner;
+  const canDelete = ['admin', 'super_admin'].includes(user?.role ?? '') || user?.isPlatformOwner;
 
   const updateStatus = async (id: string, status: InvoiceStatus) => {
     try {
@@ -98,7 +100,7 @@ export default function Invoices() {
 
   const InvoiceActions = ({ invoice }: { invoice: any }) => {
     if (!canManage) return null;
-    
+
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -108,9 +110,9 @@ export default function Invoices() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-          <InvoiceFormModal 
-            initialData={invoice} 
-            onSuccess={() => refetch()} 
+          <InvoiceFormModal
+            initialData={invoice}
+            onSuccess={() => refetch()}
             trigger={
               <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="cursor-pointer">
                 <Edit3 className="h-4 w-4 mr-2" /> Edit Invoice
@@ -128,19 +130,21 @@ export default function Invoices() {
             <PauseCircle className="h-4 w-4 mr-2" /> Put on Hold
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem 
-            className="text-destructive focus:text-destructive" 
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
             onClick={() => setConfirmAction({ id: invoice.id, status: 'cancelled', type: 'status' })}
             disabled={invoice.status === 'cancelled'}
           >
             <XCircle className="h-4 w-4 mr-2" /> Cancel Invoice
           </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
-            onClick={() => setConfirmAction({ id: invoice.id, status: 'cancelled', type: 'delete' })}
-          >
-            <XCircle className="h-4 w-4 mr-2" /> Delete Invoice
-          </DropdownMenuItem>
+          {canDelete && (
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => setConfirmAction({ id: invoice.id, status: 'cancelled', type: 'delete' })}
+            >
+              <Trash2 className="h-4 w-4 mr-2" /> Delete Invoice
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     );
