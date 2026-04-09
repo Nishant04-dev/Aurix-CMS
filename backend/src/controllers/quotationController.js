@@ -64,17 +64,8 @@ export async function createQuotation(req, res) {
       .from('clients').select('id').eq('id', data.client_id).eq('org_id', orgId).single();
     if (!client) return badRequest(res, 'Client not found in your organization');
 
-    // Free plan: max 2 quotations per month
     const { data: org } = await supabase.from('organizations').select('plan, currency').eq('id', orgId).single();
     const orgPlan = org?.plan || 'free';
-    if (orgPlan === 'free') {
-      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
-      const { count } = await supabase.from('quotations').select('id', { count: 'exact', head: true })
-        .eq('org_id', orgId).gte('created_at', monthStart.toISOString());
-      if ((count ?? 0) >= 2) {
-        return forbidden(res, 'Free plan allows 2 quotations per month. Upgrade to Pro for unlimited quotations.');
-      }
-    }
 
     if (data.template_id) {
       const { data: tmpl } = await supabase.from('templates').select('plan_required').eq('id', data.template_id).single();
@@ -262,6 +253,52 @@ export async function getTemplates(req, res) {
     return ok(res, templates);
   } catch (err) {
     logger.error('getTemplates error', { err: err.message });
+    return serverError(res, err.message);
+  }
+}
+
+export async function sendQuotationByEmail(req, res) {
+  try {
+    const { orgId, role } = req.user;
+    const { id } = req.params;
+
+    if (!['admin', 'super_admin', 'manager'].includes(role)) {
+      return forbidden(res, 'Insufficient permissions');
+    }
+
+    const { data: quotation } = await supabase
+      .from('quotations').select('id, title, amount, currency, due_date, client_id')
+      .eq('id', id).eq('org_id', orgId).maybeSingle();
+    if (!quotation) return notFound(res, 'Quotation not found');
+
+    const [{ data: client }, { data: org }] = await Promise.all([
+      supabase.from('clients').select('name, email').eq('id', quotation.client_id).single(),
+      supabase.from('organizations').select('name').eq('id', orgId).single(),
+    ]);
+
+    if (!client?.email) return badRequest(res, 'Client has no email address');
+
+    const { sendQuotationEmail } = await import('../services/mailService.js');
+    await sendQuotationEmail({
+      toEmail:      client.email,
+      clientName:   client.name,
+      orgName:      org?.name || 'Your Agency',
+      quotationId:  quotation.id,
+      title:        quotation.title,
+      amount:       quotation.amount,
+      currency:     quotation.currency,
+      dueDate:      quotation.due_date,
+      appUrl:       process.env.APP_URL,
+    });
+
+    // Auto-mark as sent
+    await supabase.from('quotations').update({ status: 'sent', updated_at: new Date().toISOString() })
+      .eq('id', id).eq('org_id', orgId).eq('status', 'draft');
+
+    logAudit({ orgId, actorId: req.user.id, action: 'quotation.emailed', targetType: 'quotation', targetId: id });
+    return ok(res, null, `Quotation sent to ${client.email}`);
+  } catch (err) {
+    logger.error('sendQuotationByEmail error', { err: err.message });
     return serverError(res, err.message);
   }
 }

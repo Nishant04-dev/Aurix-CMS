@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { checkLimit } from '../services/permissionService.js';
 import { supabase } from '../config/supabase.js';
 import { ok, created, badRequest, forbidden, notFound, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
@@ -24,9 +23,6 @@ const CreateInvoiceSchema = z.object({
 export async function createInvoice(req, res) {
   try {
     const { orgId, id: userId } = req.user;
-
-    const limit = await checkLimit(orgId, 'invoice');
-    if (!limit.allowed) return forbidden(res, limit.reason);
 
     const data = CreateInvoiceSchema.parse(req.body);
 
@@ -199,6 +195,47 @@ export async function deleteInvoice(req, res) {
     return ok(res, null, 'Invoice deleted');
   } catch (err) {
     logger.error('deleteInvoice error', { err: err.message });
+    return serverError(res, err.message);
+  }
+}
+
+export async function sendInvoiceByEmail(req, res) {
+  try {
+    const { orgId, role } = req.user;
+    const { id } = req.params;
+
+    if (!['admin', 'super_admin', 'manager'].includes(role)) {
+      return forbidden(res, 'Insufficient permissions');
+    }
+
+    const { data: invoice } = await supabase
+      .from('invoices').select('id, amount, currency, due_date, client_id, org_id')
+      .eq('id', id).eq('org_id', orgId).maybeSingle();
+    if (!invoice) return notFound(res, 'Invoice not found');
+
+    const [{ data: client }, { data: org }] = await Promise.all([
+      supabase.from('clients').select('name, email').eq('id', invoice.client_id).single(),
+      supabase.from('organizations').select('name').eq('id', orgId).single(),
+    ]);
+
+    if (!client?.email) return badRequest(res, 'Client has no email address');
+
+    const { sendInvoiceEmail } = await import('../services/mailService.js');
+    await sendInvoiceEmail({
+      toEmail:    client.email,
+      clientName: client.name,
+      orgName:    org?.name || 'Your Agency',
+      invoiceId:  invoice.id,
+      amount:     invoice.amount,
+      currency:   invoice.currency,
+      dueDate:    invoice.due_date,
+      appUrl:     process.env.APP_URL,
+    });
+
+    logAudit({ orgId, actorId: req.user.id, action: 'invoice.emailed', targetType: 'invoice', targetId: id });
+    return ok(res, null, `Invoice sent to ${client.email}`);
+  } catch (err) {
+    logger.error('sendInvoiceByEmail error', { err: err.message });
     return serverError(res, err.message);
   }
 }

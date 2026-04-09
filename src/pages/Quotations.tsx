@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrgCurrency } from '@/hooks/use-org-currency';
-import { usePlan } from '@/hooks/use-plan';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -44,7 +43,6 @@ interface QuotationItem { description: string; quantity: number; unit_price: num
 export default function Quotations() {
   const { user } = useAuth();
   const { fmt } = useOrgCurrency();
-  const { can: planCan } = usePlan();
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -54,15 +52,6 @@ export default function Quotations() {
     queryKey: ['quotations'],
     queryFn: () => api.get<any[]>('/quotations'),
   });
-
-  // Free plan: count this month's quotations
-  const { plan } = usePlan();
-  const thisMonthCount = (quotations as any[]).filter(q => {
-    const d = new Date(q.created_at);
-    const now = new Date();
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  }).length;
-  const freeLimitReached = plan === 'free' && thisMonthCount >= 2;
 
   const { data: templates = [] } = useQuery({
     queryKey: ['templates'],
@@ -150,15 +139,9 @@ export default function Quotations() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Quotations</h1>
           <p className="text-muted-foreground mt-1 text-sm">Create and manage client quotations.</p>
-          {plan === 'free' && (
-            <p className={cn('mt-1 text-xs font-semibold', freeLimitReached ? 'text-destructive' : 'text-muted-foreground')}>
-              {thisMonthCount} / 2 quotations used this month
-              {freeLimitReached && ' — Upgrade to Pro for unlimited'}
-            </p>
-          )}
         </div>
         {canManage && (
-          <Button size="sm" onClick={() => setShowCreate(true)} disabled={freeLimitReached}>
+          <Button size="sm" onClick={() => setShowCreate(true)}>
             <Plus className="h-4 w-4 mr-1.5" /> New Quotation
           </Button>
         )}
