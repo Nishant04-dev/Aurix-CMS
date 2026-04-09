@@ -12,6 +12,7 @@ const ItemSchema = z.object({
 
 const CreateQuotationSchema = z.object({
   client_id:   z.string().uuid(),
+  project_id:  z.string().uuid().optional().nullable(),
   template_id: z.string().uuid().optional().nullable(),
   title:       z.string().min(1).max(200).default('Quotation'),
   due_date:    z.string().optional().nullable(),
@@ -63,20 +64,28 @@ export async function createQuotation(req, res) {
       .from('clients').select('id').eq('id', data.client_id).eq('org_id', orgId).single();
     if (!client) return badRequest(res, 'Client not found in your organization');
 
-    // Validate template access if provided
+    // Free plan: max 2 quotations per month
+    const { data: org } = await supabase.from('organizations').select('plan, currency').eq('id', orgId).single();
+    const orgPlan = org?.plan || 'free';
+    if (orgPlan === 'free') {
+      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+      const { count } = await supabase.from('quotations').select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId).gte('created_at', monthStart.toISOString());
+      if ((count ?? 0) >= 2) {
+        return forbidden(res, 'Free plan allows 2 quotations per month. Upgrade to Pro for unlimited quotations.');
+      }
+    }
+
     if (data.template_id) {
-      const { data: org } = await supabase.from('organizations').select('plan').eq('id', orgId).single();
       const { data: tmpl } = await supabase.from('templates').select('plan_required').eq('id', data.template_id).single();
       if (tmpl) {
         const planOrder = { free: 0, pro: 1, enterprise: 2 };
-        const orgPlan = org?.plan || 'free';
         if ((planOrder[tmpl.plan_required] ?? 0) > (planOrder[orgPlan] ?? 0)) {
           return forbidden(res, `Template requires ${tmpl.plan_required} plan. Upgrade to use it.`);
         }
       }
     }
 
-    const { data: org } = await supabase.from('organizations').select('currency').eq('id', orgId).single();
     const currency = org?.currency || 'INR';
     const total = data.items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
 
@@ -86,6 +95,7 @@ export async function createQuotation(req, res) {
         org_id:      orgId,
         client_id:   data.client_id,
         template_id: data.template_id || null,
+        project_id:  data.project_id  || null,
         title:       data.title,
         due_date:    data.due_date || null,
         notes:       data.notes || null,

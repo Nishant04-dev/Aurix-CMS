@@ -24,9 +24,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Plus, MoreHorizontal, FileText, ArrowRight, Trash2, Send, Lock } from 'lucide-react';
+import { Loader2, Plus, MoreHorizontal, ArrowRight, Trash2, Send, Lock, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { DocumentRenderer, type DocumentData } from '@/components/DocumentRenderer';
 
 const STATUS_STYLES: Record<string, string> = {
   draft:     'bg-slate-100 text-slate-600 border-slate-200',
@@ -66,12 +67,19 @@ export default function Quotations() {
     enabled: canManage,
   });
 
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects-for-quotation'],
+    queryFn: () => api.get<any[]>('/projects'),
+    enabled: canManage,
+  });
+
   const [showCreate, setShowCreate] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmConvert, setConfirmConvert] = useState<string | null>(null);
+  const [previewQuotation, setPreviewQuotation] = useState<any | null>(null);
 
   // Form state
-  const [form, setForm] = useState({ client_id: '', template_id: '', title: 'Quotation', due_date: '', notes: '' });
+  const [form, setForm] = useState({ client_id: '', template_id: '', project_id: '', title: 'Quotation', due_date: '', notes: '' });
   const [items, setItems] = useState<QuotationItem[]>([{ description: '', quantity: 1, unit_price: 0 }]);
 
   const total = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
@@ -114,7 +122,7 @@ export default function Quotations() {
   const handleCreate = () => {
     if (!form.client_id) return toast({ variant: 'destructive', title: 'Select a client' });
     if (items.some(i => !i.description)) return toast({ variant: 'destructive', title: 'All items need a description' });
-    createMutation.mutate({ ...form, template_id: form.template_id || null, items });
+    createMutation.mutate({ ...form, template_id: form.template_id || null, project_id: form.project_id || null, items });
   };
 
   if (isLoading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary/40" /></div>;
@@ -169,6 +177,9 @@ export default function Quotations() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem onClick={() => setPreviewQuotation(q)}>
+                          <Eye className="h-3.5 w-3.5 mr-2" /> Preview / PDF
+                        </DropdownMenuItem>
                         {q.status === 'draft' && (
                           <DropdownMenuItem onClick={() => updateMutation.mutate({ id: q.id, status: 'sent' })}>
                             <Send className="h-3.5 w-3.5 mr-2" /> Mark as Sent
@@ -213,8 +224,22 @@ export default function Quotations() {
                 <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
               </div>
             </div>
-
-            {/* Template selector */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Link to Project <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                <Select value={form.project_id} onValueChange={v => setForm(f => ({ ...f, project_id: v }))}>
+                  <SelectTrigger><SelectValue placeholder="No project" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No project</SelectItem>
+                    {(projects as any[]).map((p: any) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Due Date</Label>
+                <Input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} />
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label>Template</Label>
               <div className="grid grid-cols-4 gap-2">
@@ -314,6 +339,30 @@ export default function Quotations() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Preview / PDF dialog */}
+      <Dialog open={!!previewQuotation} onOpenChange={() => setPreviewQuotation(null)}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Quotation Preview</DialogTitle></DialogHeader>
+          {previewQuotation && (
+            <DocumentRenderer
+              templateSlug={templates.find((t: Template) => t.id === previewQuotation.template_id)?.slug || 'basic'}
+              data={{
+                type: 'quotation',
+                id: previewQuotation.id,
+                title: previewQuotation.title,
+                status: previewQuotation.status,
+                amount: Number(previewQuotation.amount),
+                currency: previewQuotation.currency || 'INR',
+                due_date: previewQuotation.due_date,
+                notes: previewQuotation.notes,
+                items: previewQuotation.quotation_items ?? [],
+                created_at: previewQuotation.created_at,
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
