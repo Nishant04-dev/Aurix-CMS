@@ -89,7 +89,7 @@ export async function respondToInvitation(req, res) {
       if (!inv) return notFound(res, 'Invitation not found');
       if (inv.invited_by !== userId) return forbidden(res, 'You can only cancel your own invitations');
       const { error } = await supabase
-        .from('invitations').update({ status: 'cancelled' }).eq('id', invitation_id);
+        .from('invitations').update({ status: 'cancelled' }).eq('id', invitation_id).eq('invited_by', userId);
       if (error) throw error;
       return ok(res, null, 'Invitation cancelled');
     }

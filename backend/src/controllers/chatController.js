@@ -49,7 +49,7 @@ export async function deleteChannel(req, res) {
     if (!ch) return notFound(res, 'Channel not found');
     if (ch.org_id !== orgId) return forbidden(res, 'Channel does not belong to your organization');
 
-    await supabase.from('chat_channels').delete().eq('id', channelId);
+    await supabase.from('chat_channels').delete().eq('id', channelId).eq('org_id', orgId);
     logAudit({ orgId, actorId: userId, action: 'channel.deleted', targetType: 'channel', targetId: channelId, metadata: { name: ch.name } });
 
     return ok(res, null, 'Channel deleted');
