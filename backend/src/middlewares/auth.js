@@ -165,6 +165,11 @@ export async function requirePlatformOwner(req, res, next) {
         req.user.isPlatformOwner = true;
         return next();
       }
+      // Also accept lowercase/variant spellings
+      if (role?.name?.toLowerCase() === 'owner') {
+        req.user.isPlatformOwner = true;
+        return next();
+      }
     }
   } catch (err) {
     logger.warn('requirePlatformOwner check failed', { err: err.message });

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { logAudit } from '@/lib/auditLog';
 import { useOrgSettings } from '@/hooks/use-org-settings';
@@ -12,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Loader2, Building2, Globe, DollarSign, Settings2, Upload, X,
-  CheckCircle2, ImageIcon, CreditCard,
+  CheckCircle2, ImageIcon, CreditCard, Palette,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_CURRENCIES } from '@/lib/currency';
@@ -68,10 +69,18 @@ function OrgSettingsForm() {
   const { toast } = useToast();
   const logoInputRef = useRef<HTMLInputElement>(null);
 
+  const { data: templates = [] } = useQuery({
+    queryKey: ['templates'],
+    queryFn: () => api.get<any[]>('/templates'),
+    enabled: !!orgId,
+  });
+
   const [form, setForm] = useState({
     name: '', website: '', phone: '', address: '',
     logo_url: '', gst_number: '', currency: 'INR', timezone: 'UTC',
   });
+  const [branding, setBranding] = useState({ color: '#6366f1', font: 'inter', show_logo: true, show_gst: true });
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('none');
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -89,6 +98,8 @@ function OrgSettingsForm() {
         timezone:   settings.timezone    || 'UTC',
       });
       setLogoPreview(settings.logo_url || null);
+      if ((settings as any).branding) setBranding({ color: '#6366f1', font: 'inter', show_logo: true, show_gst: true, ...(settings as any).branding });
+      if ((settings as any).template_id) setSelectedTemplateId((settings as any).template_id);
     }
   }, [settings]);
 
@@ -136,6 +147,7 @@ function OrgSettingsForm() {
         phone: form.phone.trim() || null, address: form.address.trim() || null,
         logo_url: form.logo_url || null, gst_number: form.gst_number.trim() || null,
         currency: form.currency, timezone: form.timezone,
+        branding, template_id: selectedTemplateId === 'none' ? null : (selectedTemplateId || null),
       } as any);
       console.log('AUDIT LOG TRIGGERED: ORG_SETTINGS_UPDATED');
       logAudit({ orgId, userId: user?.id, action: 'ORG_SETTINGS_UPDATED', entity: 'organization', entityId: orgId || undefined, metadata: { name: form.name, currency: form.currency } });
@@ -266,6 +278,73 @@ function OrgSettingsForm() {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">Used for scheduling and date display across the platform.</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/50 shadow-sm">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Palette className="h-4 w-4 text-primary" /> Document Template & Branding
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Default Invoice / Quotation Template</Label>
+            <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId} disabled={disabled}>
+              <SelectTrigger className="h-10"><SelectValue placeholder="Select template" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No default (Basic)</SelectItem>
+                {(templates as any[]).map((t: any) => (
+                  <SelectItem key={t.id} value={t.id} disabled={t.locked}>
+                    {t.name} {t.locked ? `(${t.plan_required} plan)` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Applied automatically when creating invoices and quotations.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Brand Color</Label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={branding.color}
+                  onChange={e => setBranding(b => ({ ...b, color: e.target.value }))}
+                  disabled={disabled}
+                  className="h-10 w-16 rounded border border-border cursor-pointer disabled:opacity-50"
+                />
+                <Input
+                  value={branding.color}
+                  onChange={e => setBranding(b => ({ ...b, color: e.target.value }))}
+                  disabled={disabled}
+                  className="font-mono text-sm"
+                  maxLength={7}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Font Style</Label>
+              <Select value={branding.font} onValueChange={v => setBranding(b => ({ ...b, font: v }))} disabled={disabled}>
+                <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inter">Inter (Modern)</SelectItem>
+                  <SelectItem value="serif">Serif (Classic)</SelectItem>
+                  <SelectItem value="mono">Monospace (Technical)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex gap-6">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={branding.show_logo} onChange={e => setBranding(b => ({ ...b, show_logo: e.target.checked }))} disabled={disabled} className="rounded" />
+              <span className="text-sm">Show logo on documents</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={branding.show_gst} onChange={e => setBranding(b => ({ ...b, show_gst: e.target.checked }))} disabled={disabled} className="rounded" />
+              <span className="text-sm">Show GST number</span>
+            </label>
           </div>
         </CardContent>
       </Card>

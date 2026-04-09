@@ -88,7 +88,7 @@ export default function Quotations() {
   const [previewQuotation, setPreviewQuotation] = useState<any | null>(null);
 
   // Form state
-  const [form, setForm] = useState({ client_id: '', template_id: '', project_id: '', title: 'Quotation', due_date: '', notes: '' });
+  const [form, setForm] = useState({ client_id: '', template_id: '', project_id: 'none', title: 'Quotation', due_date: '', notes: '' });
   const [items, setItems] = useState<QuotationItem[]>([{ description: '', quantity: 1, unit_price: 0 }]);
 
   const total = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
@@ -99,7 +99,7 @@ export default function Quotations() {
       qc.invalidateQueries({ queryKey: ['quotations'] });
       toast({ title: 'Quotation created' });
       setShowCreate(false);
-      setForm({ client_id: '', template_id: '', title: 'Quotation', due_date: '', notes: '' });
+      setForm({ client_id: '', template_id: '', project_id: 'none', title: 'Quotation', due_date: '', notes: '' });
       setItems([{ description: '', quantity: 1, unit_price: 0 }]);
     },
     onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.message }),
@@ -139,7 +139,7 @@ export default function Quotations() {
   const handleCreate = () => {
     if (!form.client_id) return toast({ variant: 'destructive', title: 'Select a client' });
     if (items.some(i => !i.description)) return toast({ variant: 'destructive', title: 'All items need a description' });
-    createMutation.mutate({ ...form, template_id: form.template_id || null, project_id: form.project_id || null, items });
+    createMutation.mutate({ ...form, template_id: form.template_id || null, project_id: form.project_id === 'none' ? null : (form.project_id || null), items });
   };
 
   if (isLoading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary/40" /></div>;
@@ -269,7 +269,7 @@ export default function Quotations() {
                 <Select value={form.project_id} onValueChange={v => setForm(f => ({ ...f, project_id: v }))}>
                   <SelectTrigger><SelectValue placeholder="No project" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No project</SelectItem>
+                    <SelectItem value="none">No project</SelectItem>
                     {(projects as any[]).map((p: any) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
                   </SelectContent>
                 </Select>
