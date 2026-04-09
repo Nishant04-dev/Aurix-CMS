@@ -12,6 +12,7 @@ import { registerFile, deleteFile }                                  from '../co
 import { uploadFile, getPublicUrl, createSignedUrl, deleteFile as deleteStorageFile } from '../controllers/storageController.js';
 import { sendInvitation, respondToInvitation, getMyInvitations, lookupUserByDisplayId } from '../controllers/invitationController.js';
 import { createInvoice, getInvoices, updateInvoice, cancelInvoice, deleteInvoice } from '../controllers/invoiceController.js';
+import { getQuotations, createQuotation, updateQuotation, convertToInvoice, deleteQuotation, getTemplates } from '../controllers/quotationController.js';
 import { getClients, createClient, updateClient, deleteClient }      from '../controllers/clientController.js';
 import { getUsers, updateUser, deleteUser }                          from '../controllers/userController.js';
 import { getRoles, createRole, updateRole, deleteRole }                          from '../controllers/roleController.js';
@@ -85,6 +86,16 @@ router.post  ('/invoices',              requireOrg, writeLimiter, createInvoice)
 router.patch ('/invoices/:id',          requireOrg, writeLimiter, updateInvoice);
 router.patch ('/invoices/:id/cancel',   requireOrg, writeLimiter, cancelInvoice);
 router.delete('/invoices/:id',          requireOrg, writeLimiter, deleteInvoice);
+
+// ── Templates ─────────────────────────────────────────────────
+router.get('/templates', requireOrg, getTemplates);
+
+// ── Quotations ────────────────────────────────────────────────
+router.get   ('/quotations',                  requireOrg, getQuotations);
+router.post  ('/quotations',                  requireOrg, writeLimiter, createQuotation);
+router.patch ('/quotations/:id',              requireOrg, writeLimiter, updateQuotation);
+router.post  ('/quotations/:id/convert',      requireOrg, writeLimiter, convertToInvoice);
+router.delete('/quotations/:id',              requireOrg, writeLimiter, deleteQuotation);
 
 // ── Roles ─────────────────────────────────────────────────────
 router.get   ('/roles',           requireOrg, requirePermission('manage_roles'), getRoles);

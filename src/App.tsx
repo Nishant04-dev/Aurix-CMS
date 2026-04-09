@@ -23,6 +23,7 @@ import Chat from "@/pages/Chat";
 import Billing from "@/pages/Billing";
 import Settings from "@/pages/Settings";
 import Invitations from "@/pages/Invitations";
+import Quotations from "@/pages/Quotations";
 import Onboarding from "@/pages/Onboarding";
 import Platform from "@/pages/Platform";
 import WaitingApproval from "@/pages/WaitingApproval";
@@ -121,6 +122,7 @@ function AppRoutes() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/settings" element={isClientRole ? <Navigate to="/" replace /> : <Settings />} />
         <Route path="/invitations" element={<Invitations />} />
+        <Route path="/quotations"  element={<UnknownRoleGate>{isClientRole || can('view_invoices') ? <Quotations /> : <Navigate to="/" replace />}</UnknownRoleGate>} />
         <Route path="/support" element={<Support />} />
         <Route path="/org/audit-logs" element={<RequireAdmin><AuditLogs /></RequireAdmin>} />
         <Route path="/org/chat" element={<Chat />} />

@@ -20,6 +20,9 @@ export type FeatureKey =
   | 'audit_logs_limited'
   | 'settings'
   | 'platform'
+  | 'quotations'
+  | 'templates_pro'
+  | 'templates_enterprise'
   | 'all';
 
 export interface Plan {
@@ -66,6 +69,8 @@ export const PLANS: Record<PlanId, Plan> = {
       'team_chat',
       'audit_logs_limited',
       'settings',
+      'quotations',
+      'templates_pro',
     ],
   },
   enterprise: {

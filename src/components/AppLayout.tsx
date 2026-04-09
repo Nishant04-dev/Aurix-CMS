@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { label: 'Tasks',      icon: CheckSquare,      path: '/tasks',             perm: 'view_project',  superAdminOnly: false, planFeature: null },
   { label: 'Messages',   icon: MessageSquare,    path: '/messages',          perm: 'view_project',  superAdminOnly: false, planFeature: null },
   { label: 'Invoices',   icon: CreditCard,       path: '/invoices',          perm: 'view_invoices', superAdminOnly: false, planFeature: 'invoices_basic' as FeatureKey },
+  { label: 'Quotations', icon: FileText,          path: '/quotations',        perm: 'view_invoices', superAdminOnly: false, planFeature: 'quotations' as FeatureKey },
   { label: 'Files',      icon: FileText,         path: '/files',             perm: 'view_file',     superAdminOnly: false, planFeature: 'files' as FeatureKey },
   { label: 'Team',       icon: UserCog,          path: '/team',              perm: 'invite_user',   superAdminOnly: false, planFeature: 'team_limited' as FeatureKey },
   { label: 'Roles',      icon: ShieldCheck,      path: '/roles',             perm: 'manage_roles',  superAdminOnly: false, planFeature: 'roles_basic' as FeatureKey },
