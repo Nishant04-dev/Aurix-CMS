@@ -24,7 +24,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Plus, MoreHorizontal, ArrowRight, Trash2, Send, Lock, Eye } from 'lucide-react';
+import { Loader2, Plus, MoreHorizontal, ArrowRight, Trash2, Send, Lock, Eye, Mail, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { DocumentRenderer, type DocumentData } from '@/components/DocumentRenderer';
@@ -54,6 +54,15 @@ export default function Quotations() {
     queryKey: ['quotations'],
     queryFn: () => api.get<any[]>('/quotations'),
   });
+
+  // Free plan: count this month's quotations
+  const { plan } = usePlan();
+  const thisMonthCount = (quotations as any[]).filter(q => {
+    const d = new Date(q.created_at);
+    const now = new Date();
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }).length;
+  const freeLimitReached = plan === 'free' && thisMonthCount >= 2;
 
   const { data: templates = [] } = useQuery({
     queryKey: ['templates'],
@@ -103,11 +112,19 @@ export default function Quotations() {
   });
 
   const convertMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/quotations/${id}/convert`, {}),
-    onSuccess: () => {
+    mutationFn: (id: string) => api.post<any>(`/quotations/${id}/convert`, {}),
+    onSuccess: (result: any) => {
       qc.invalidateQueries({ queryKey: ['quotations'] });
       qc.invalidateQueries({ queryKey: ['invoices'] });
-      toast({ title: 'Converted to invoice' });
+      toast({
+        title: 'Converted to invoice',
+        description: (
+          <span>
+            Invoice created.{' '}
+            <a href="/invoices" className="underline font-semibold">View Invoices →</a>
+          </span>
+        ) as any,
+      });
       setConfirmConvert(null);
     },
     onError: (err: any) => toast({ variant: 'destructive', title: 'Error', description: err.message }),
@@ -133,9 +150,15 @@ export default function Quotations() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Quotations</h1>
           <p className="text-muted-foreground mt-1 text-sm">Create and manage client quotations.</p>
+          {plan === 'free' && (
+            <p className={cn('mt-1 text-xs font-semibold', freeLimitReached ? 'text-destructive' : 'text-muted-foreground')}>
+              {thisMonthCount} / 2 quotations used this month
+              {freeLimitReached && ' — Upgrade to Pro for unlimited'}
+            </p>
+          )}
         </div>
         {canManage && (
-          <Button size="sm" onClick={() => setShowCreate(true)}>
+          <Button size="sm" onClick={() => setShowCreate(true)} disabled={freeLimitReached}>
             <Plus className="h-4 w-4 mr-1.5" /> New Quotation
           </Button>
         )}
@@ -176,9 +199,20 @@ export default function Quotations() {
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem onClick={() => setPreviewQuotation(q)}>
                           <Eye className="h-3.5 w-3.5 mr-2" /> Preview / PDF
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={async () => {
+                          try {
+                            await api.post(`/quotations/${q.id}/send`, {});
+                            toast({ title: 'Email sent', description: 'Quotation delivered to client.' });
+                            qc.invalidateQueries({ queryKey: ['quotations'] });
+                          } catch (err: any) {
+                            toast({ variant: 'destructive', title: 'Email failed', description: err.message });
+                          }
+                        }}>
+                          <Mail className="h-3.5 w-3.5 mr-2" /> Send to Client
                         </DropdownMenuItem>
                         {q.status === 'draft' && (
                           <DropdownMenuItem onClick={() => updateMutation.mutate({ id: q.id, status: 'sent' })}>
@@ -188,6 +222,11 @@ export default function Quotations() {
                         {['sent','accepted'].includes(q.status) && (
                           <DropdownMenuItem onClick={() => setConfirmConvert(q.id)}>
                             <ArrowRight className="h-3.5 w-3.5 mr-2" /> Convert to Invoice
+                          </DropdownMenuItem>
+                        )}
+                        {q.status === 'converted' && q.invoice_id && (
+                          <DropdownMenuItem asChild>
+                            <a href="/invoices"><ExternalLink className="h-3.5 w-3.5 mr-2" /> View Invoice</a>
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
@@ -259,13 +298,6 @@ export default function Quotations() {
                     {t.locked && <Lock className="absolute top-2 right-2 h-3 w-3 text-muted-foreground" />}
                   </button>
                 ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Due Date</Label>
-                <Input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} />
               </div>
             </div>
 
