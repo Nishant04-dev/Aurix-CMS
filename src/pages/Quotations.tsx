@@ -366,7 +366,7 @@ export default function Quotations() {
 
       {/* Preview / PDF dialog */}
       <Dialog open={!!previewQuotation} onOpenChange={() => setPreviewQuotation(null)}>
-        <DialogContent className="max-w-none w-auto max-h-[95vh] overflow-auto p-4">
+        <DialogContent className="max-w-none w-auto max-h-[95vh] overflow-auto p-4 bg-white">
           <DialogHeader><DialogTitle>Quotation Preview</DialogTitle></DialogHeader>
           {previewQuotation && (() => {
             // Don't render until org is loaded — prevents "Your Company" flash

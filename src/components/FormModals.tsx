@@ -673,7 +673,7 @@ export function InvoiceDetailsModal({ invoice, client: clientProp, trigger }: { 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-none w-auto max-h-[95vh] overflow-auto p-4">
+      <DialogContent className="max-w-none w-auto max-h-[95vh] overflow-auto p-4 bg-white">
         {orgLoading || !org ? (
           <div className="flex items-center justify-center w-[794px] h-48">
             <Loader2 className="h-6 w-6 animate-spin text-primary/40" />

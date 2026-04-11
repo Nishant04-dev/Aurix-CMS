@@ -130,10 +130,11 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
           style={{
             background: cfg.bg,
             fontFamily: cfg.font,
-            // Body text is always dark — headerText only applies inside the header div
             color:      cfg.bg === '#1e293b' ? '#f8fafc' : '#1e293b',
             width:      '794px',
             minHeight:  '1123px',
+            opacity:    1,
+            filter:     'none',
           }}
           className={cn('rounded-xl shadow-sm border', compact ? 'text-xs' : 'text-sm')}
         >
