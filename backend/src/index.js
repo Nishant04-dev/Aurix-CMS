@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './env.js'; // MUST be first — loads .env before any other module reads process.env
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -11,9 +11,10 @@ import routes from './routes/index.js';
 const REQUIRED_ENV = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'];
 const missing = REQUIRED_ENV.filter(k => !process.env[k]);
 if (missing.length) {
-  console.error(`[FATAL] Missing required env vars: ${missing.join(', ')}`);
-  console.error('[FATAL] Ensure backend/.env exists and contains these variables.');
-  process.exit(1);
+  throw new Error(
+    `[FATAL] Missing required env vars: ${missing.join(', ')}. ` +
+    `Check that .env exists at the backend root and contains these keys.`
+  );
 }
 
 const app  = express();

@@ -13,11 +13,17 @@ async function getInvoiceQueue() {
 }
 
 const CreateInvoiceSchema = z.object({
-  client_id: z.string().uuid(),
-  amount:    z.number().positive(),
-  due_date:  z.string(),
-  status:    z.enum(['pending','paid','overdue','on_hold','cancelled']).default('pending'),
-  items:     z.array(z.object({ description: z.string(), amount: z.number() })).optional(),
+  client_id:   z.string().uuid(),
+  amount:      z.number().positive(),
+  due_date:    z.string(),
+  description: z.string().optional().nullable(),
+  status:      z.enum(['pending','paid','overdue','on_hold','cancelled']).default('pending'),
+  items:       z.array(z.object({
+    description: z.string(),
+    quantity:    z.number().positive().optional().default(1),
+    unit_price:  z.number().min(0).optional(),
+    amount:      z.number().optional(),
+  })).optional(),
 });
 
 export async function createInvoice(req, res) {
@@ -46,12 +52,13 @@ export async function createInvoice(req, res) {
     const { data: invoice, error } = await supabase
       .from('invoices')
       .insert({
-        client_id:  data.client_id,
-        amount:     data.amount,
-        due_date:   data.due_date,
-        status:     data.status,
-        org_id:     orgId,
-        created_by: userId,
+        client_id:   data.client_id,
+        amount:      data.amount,
+        due_date:    data.due_date,
+        status:      data.status,
+        description: data.description || null,
+        org_id:      orgId,
+        created_by:  userId,
         currency,
       })
       .select().single();
@@ -61,7 +68,13 @@ export async function createInvoice(req, res) {
     // Insert line items if provided
     if (data.items?.length) {
       await supabase.from('invoice_items').insert(
-        data.items.map(item => ({ ...item, invoice_id: invoice.id }))
+        data.items.map(item => ({
+          invoice_id:  invoice.id,
+          description: item.description,
+          quantity:    item.quantity ?? 1,
+          unit_price:  item.unit_price ?? 0,
+          amount:      item.amount ?? (item.quantity ?? 1) * (item.unit_price ?? 0),
+        }))
       );
     }
 
@@ -86,7 +99,7 @@ export async function getInvoices(req, res) {
 
     let query = supabase
       .from('invoices')
-      .select('*, invoice_items(*)')
+      .select('*, invoice_items(*), client:clients(id, name, company, email)')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false });
 
@@ -187,6 +200,11 @@ export async function deleteInvoice(req, res) {
 
     // Delete line items first
     await supabase.from('invoice_items').delete().eq('invoice_id', id);
+
+    // Null out any quotation references to avoid FK constraint violation
+    await supabase.from('quotations')
+      .update({ invoice_id: null })
+      .eq('invoice_id', id);
 
     const { error } = await supabase.from('invoices').delete().eq('id', id).eq('org_id', orgId);
     if (error) throw error;

@@ -98,8 +98,14 @@ function OrgSettingsForm() {
         timezone:   settings.timezone    || 'UTC',
       });
       setLogoPreview(settings.logo_url || null);
-      if ((settings as any).branding) setBranding({ color: '#6366f1', font: 'inter', show_logo: true, show_gst: true, ...(settings as any).branding });
-      if ((settings as any).template_id) setSelectedTemplateId((settings as any).template_id);
+      setBranding({
+        color:     '#6366f1',
+        font:      'inter',
+        show_logo: true,
+        show_gst:  true,
+        ...(settings.branding ?? {}),
+      });
+      setSelectedTemplateId(settings.template_id ?? 'none');
     }
   }, [settings]);
 

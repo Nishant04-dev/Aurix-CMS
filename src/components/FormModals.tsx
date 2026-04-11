@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Check, ChevronsUpDown, Plus, Loader2, Lock } from 'lucide-react';
 import type { ProjectStatus, TaskStatus, InvoiceStatus, ProjectMember } from '@/types';
 import { useClients, useProjects, useTeamMembers, useCreateClient } from '@/hooks/use-database';
@@ -7,7 +7,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/apiClient';
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,9 +24,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { useAuth } from '@/contexts/AuthContext';
+import { DocumentRenderer } from '@/components/DocumentRenderer';
+import { useOrganization } from '@/hooks/use-organization';
 
 interface FormModalProps {
   trigger?: React.ReactNode;
@@ -635,171 +634,139 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
   );
 }
 
-// Invoice Details Viewer — fully dynamic with org branding
-export function InvoiceDetailsModal({ invoice, client, trigger }: { invoice: any, client: any, trigger: React.ReactNode }) {
+// Invoice Details Viewer — uses DocumentRenderer for consistent branding + PDF
+export function InvoiceDetailsModal({ invoice, client: clientProp, trigger }: { invoice: any, client: any, trigger: React.ReactNode }) {
   const [open, setOpen] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [org, setOrg] = useState<any>(null);
-  const invoiceRef = useRef<HTMLDivElement>(null);
   const { orgId } = useAuth();
+  const { data: org, isLoading: orgLoading } = useOrganization();
+  const [templates, setTemplates] = useState<any[]>([]);
 
-  // Load org settings when modal opens
+  // Use embedded client from API join, fall back to passed prop
+  const client = invoice?.client || clientProp;
+
   useEffect(() => {
     if (!open || !orgId) return;
-    api.get<any>('/organizations').then(data => setOrg(data)).catch(() => {});
+    api.get<any[]>('/templates').then(data => setTemplates(data)).catch(() => {});
   }, [open, orgId]);
 
-  const currency = org?.currency || invoice?.currency || 'USD';
-  const fmt = (amount: number) => {
-    try {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: currency === 'JPY' ? 0 : 2 }).format(amount);
-    } catch { return `${amount}`; }
-  };
+  // Resolve template slug from org's default template, fall back to 'basic'
+  const templateSlug = templates.find(t => t.id === org?.template_id)?.slug || 'basic';
 
-  const orgInitials = (org?.name || 'O').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
+  // Map invoice → DocumentData items shape
+  const lineItems = (invoice.invoice_items ?? invoice.items ?? []).map((i: any) => ({
+    description: i.description || invoice.description || 'No description',
+    quantity:    i.quantity ?? 1,
+    unit_price:  i.unit_price ?? 0,
+    amount:      i.amount ?? (i.quantity ?? 1) * (i.unit_price ?? 0),
+  }));
 
-  const handleDownloadPDF = async () => {
-    if (!invoiceRef.current) return;
-    setIsDownloading(true);
-    try {
-      const prefix = (org?.name || 'INV').replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || 'INV';
-      const cleanId = (invoice.id || '0001').substring(0, 6).toUpperCase();
-      const fileName = `${prefix}-${cleanId}.pdf`;
-      const canvas = await html2canvas(invoiceRef.current, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [canvas.width / 2, canvas.height / 2] });
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width / 2, canvas.height / 2);
-      pdf.save(fileName);
-    } catch (err) { console.error('PDF failed:', err); }
-    finally { setIsDownloading(false); }
-  };
+  // Synthesise a single item from invoice-level fields if no line items exist
+  const items = lineItems.length > 0 ? lineItems : [{
+    description: invoice.description || 'Service Fee',
+    quantity:    1,
+    unit_price:  Number(invoice.amount),
+    amount:      Number(invoice.amount),
+  }];
 
-  const statusStyle = {
-    paid:      'bg-emerald-50 text-emerald-600 border-emerald-100',
-    pending:   'bg-amber-50 text-amber-600 border-amber-100',
-    overdue:   'bg-rose-50 text-rose-600 border-rose-100',
-    on_hold:   'bg-orange-50 text-orange-600 border-orange-100',
-    cancelled: 'bg-slate-50 text-slate-600 border-slate-100',
-  }[invoice.status as string] || 'bg-slate-50 text-slate-600 border-slate-100';
+  console.log('[InvoiceDetailsModal] org:', org, '| client:', client, '| orgLoading:', orgLoading);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-0 border-none shadow-2xl">
-        <div ref={invoiceRef} className="p-8 bg-white">
-
-          {/* ── HEADER ── */}
-          <div className="flex items-start justify-between mb-8">
-            {/* Org branding */}
-            <div className="flex items-center gap-3">
-              {org?.logo_url ? (
-                <img src={org.logo_url} alt="Logo" className="h-12 w-12 object-contain rounded-lg" />
-              ) : (
-                <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
-                  {orgInitials}
-                </div>
-              )}
-              <div>
-                <p className="font-bold text-lg text-foreground leading-tight">{org?.name || 'Your Organization'}</p>
-                {org?.website && <p className="text-xs text-muted-foreground">{org.website}</p>}
-              </div>
-            </div>
-
-            {/* Invoice meta */}
-            <div className="text-right">
-              <p className="text-2xl font-bold text-foreground">INVOICE</p>
-              <p className="text-sm font-mono text-muted-foreground">#INV-{invoice.id.substring(0, 8).toUpperCase()}</p>
-              <p className="text-xs text-muted-foreground mt-1">{new Date(invoice.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-              <span className={cn('inline-block mt-2 px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest border', statusStyle)}>
-                {invoice.status}
-              </span>
-            </div>
+      <DialogContent className="max-w-none w-auto max-h-[95vh] overflow-auto p-4">
+        {orgLoading || !org ? (
+          <div className="flex items-center justify-center w-[794px] h-48">
+            <Loader2 className="h-6 w-6 animate-spin text-primary/40" />
           </div>
+        ) : (
+          <DocumentRenderer
+            templateSlug={templateSlug}
+            data={{
+              type:       'invoice',
+              id:         invoice.id,
+              status:     invoice.status,
+              amount:     Number(invoice.amount),
+              currency:   invoice.currency || org.currency || 'INR',
+              due_date:   invoice.due_date || invoice.dueDate || null,
+              notes:      invoice.notes || null,
+              created_at: invoice.created_at || invoice.createdAt,
+              items,
+              org: {
+                name:     org.name,
+                logo_url: org.logo_url,
+                address:  org.address,
+                phone:    org.phone,
+                email:    org.email,
+              },
+              client: client ? {
+                name:    client.name,
+                company: client.company,
+                email:   client.email,
+              } : undefined,
+            }}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-          {/* ── ORG DETAILS ── */}
-          {(org?.address || org?.phone || org?.gst_number) && (
-            <div className="bg-muted/20 rounded-xl p-4 mb-6 text-xs text-muted-foreground space-y-1">
-              {org?.address    && <p>📍 {org.address}</p>}
-              {org?.phone      && <p>📞 {org.phone}</p>}
-              {org?.gst_number && <p>🏛 GST: {org.gst_number}</p>}
-            </div>
-          )}
+  // Resolve template slug from org's default template, fall back to 'basic'
+  const templateSlug = templates.find(t => t.id === org?.template_id)?.slug || 'basic';
 
-          {/* ── BILLING PARTIES ── */}
-          <div className="grid grid-cols-2 gap-8 pb-6 border-b border-border/50 mb-6">
-            <div>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] mb-2">Billed To</p>
-              <p className="font-bold text-foreground">{client?.name || 'Customer'}</p>
-              {client?.company && <p className="text-sm text-muted-foreground">{client.company}</p>}
-              {client?.email   && <p className="text-sm text-muted-foreground">{client.email}</p>}
-            </div>
-            <div className="text-right">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] mb-2">From</p>
-              <p className="font-bold text-foreground">{org?.name || 'Your Organization'}</p>
-              {org?.address && <p className="text-sm text-muted-foreground">{org.address}</p>}
-            </div>
+  // Map invoice → DocumentData items shape
+  const lineItems = (invoice.invoice_items ?? invoice.items ?? []).map((i: any) => ({
+    description: i.description || invoice.description || 'No description',
+    quantity:    i.quantity ?? 1,
+    unit_price:  i.unit_price ?? 0,
+    amount:      i.amount ?? (i.quantity ?? 1) * (i.unit_price ?? 0),
+  }));
+
+  // Synthesise a single item from invoice-level fields if no line items exist
+  const items = lineItems.length > 0 ? lineItems : [{
+    description: invoice.description || 'Service Fee',
+    quantity:    1,
+    unit_price:  Number(invoice.amount),
+    amount:      Number(invoice.amount),
+  }];
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="max-w-none w-auto max-h-[95vh] overflow-auto p-4">
+        {/* Wait for org to load before rendering — prevents "Your Company" flash */}
+        {!org ? (
+          <div className="flex items-center justify-center w-[794px] h-48">
+            <Loader2 className="h-6 w-6 animate-spin text-primary/40" />
           </div>
-
-          {/* ── LINE ITEMS ── */}
-          <table className="w-full text-sm mb-6">
-            <thead>
-              <tr className="border-b border-border/50">
-                <th className="text-left py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Description</th>
-                <th className="text-right py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Amount</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/20">
-              {invoice.items?.length > 0
-                ? invoice.items.map((item: any, idx: number) => (
-                    <tr key={idx}>
-                      <td className="py-3 font-medium text-foreground">{item.description}</td>
-                      <td className="py-3 text-right font-bold font-mono">{fmt(item.amount)}</td>
-                    </tr>
-                  ))
-                : (
-                  <tr>
-                    <td className="py-3 font-medium text-foreground">Service Fee</td>
-                    <td className="py-3 text-right font-bold font-mono">{fmt(invoice.amount)}</td>
-                  </tr>
-                )
-              }
-            </tbody>
-          </table>
-
-          {/* ── TOTALS ── */}
-          <div className="flex justify-end mb-8">
-            <div className="w-56 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span className="font-bold font-mono">{fmt(invoice.amount)}</span>
-              </div>
-              <div className="flex justify-between text-muted-foreground/60 italic">
-                <span>Tax (0%)</span>
-                <span className="font-mono">{fmt(0)}</span>
-              </div>
-              <div className="flex justify-between pt-2 border-t border-border">
-                <span className="font-bold uppercase tracking-widest">Total</span>
-                <span className="text-xl font-bold font-mono text-primary">{fmt(invoice.amount)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* ── FOOTER ── */}
-          <div className="bg-muted/20 rounded-xl p-4 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
-              Due by {invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : '—'}.
-              Thank you for your business.
-            </p>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleDownloadPDF} disabled={isDownloading}>
-                {isDownloading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                Download PDF
-              </Button>
-              {invoice.status === 'pending' && <Button size="sm">Pay Now</Button>}
-            </div>
-          </div>
-
-        </div>
+        ) : (
+          <DocumentRenderer
+            templateSlug={templateSlug}
+            data={{
+              type:       'invoice',
+              id:         invoice.id,
+              status:     invoice.status,
+              amount:     Number(invoice.amount),
+              currency:   invoice.currency || org.currency || 'INR',
+              due_date:   invoice.due_date || invoice.dueDate || null,
+              notes:      invoice.notes || null,
+              created_at: invoice.created_at || invoice.createdAt,
+              items,
+              org: {
+                name:     org.name,
+                logo_url: org.logo_url,
+                address:  org.address,
+                phone:    org.phone,
+                email:    org.email,
+              },
+              client: client ? {
+                name:    client.name,
+                company: client.company,
+                email:   client.email,
+              } : undefined,
+            }}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

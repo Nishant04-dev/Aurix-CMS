@@ -27,6 +27,7 @@ import { Loader2, Plus, MoreHorizontal, ArrowRight, Trash2, Send, Lock, Eye, Mai
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { DocumentRenderer, type DocumentData } from '@/components/DocumentRenderer';
+import { useOrganization } from '@/hooks/use-organization';
 
 const STATUS_STYLES: Record<string, string> = {
   draft:     'bg-slate-100 text-slate-600 border-slate-200',
@@ -62,7 +63,8 @@ export default function Quotations() {
   const { data: clients = [] } = useQuery({
     queryKey: ['clients-for-quotation'],
     queryFn: () => api.get<Client[]>('/clients'),
-    enabled: canManage,
+    // fetch for all roles so client name shows in preview even for non-managers
+    enabled: !!user,
   });
 
   const { data: projects = [] } = useQuery({
@@ -70,6 +72,8 @@ export default function Quotations() {
     queryFn: () => api.get<any[]>('/projects'),
     enabled: canManage,
   });
+
+  const { data: org, isLoading: orgLoading } = useOrganization();
 
   const [showCreate, setShowCreate] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -164,7 +168,12 @@ export default function Quotations() {
             {quotations.map((q: any) => (
               <tr key={q.id} className="hover:bg-accent/20 transition-colors">
                 <td className="px-4 py-3 font-medium">{q.title}</td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">{q.client_id}</td>
+                <td className="px-4 py-3 text-sm text-foreground">
+                  {q.client?.company || q.client?.name ||
+                   clients.find((c: Client) => c.id === q.client_id)?.company ||
+                   clients.find((c: Client) => c.id === q.client_id)?.name ||
+                   '—'}
+                </td>
                 <td className="px-4 py-3 font-mono font-bold">{fmt(Number(q.amount))}</td>
                 <td className="px-4 py-3">
                   <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase', STATUS_STYLES[q.status] || STATUS_STYLES.draft)}>
@@ -357,25 +366,64 @@ export default function Quotations() {
 
       {/* Preview / PDF dialog */}
       <Dialog open={!!previewQuotation} onOpenChange={() => setPreviewQuotation(null)}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-none w-auto max-h-[95vh] overflow-auto p-4">
           <DialogHeader><DialogTitle>Quotation Preview</DialogTitle></DialogHeader>
-          {previewQuotation && (
-            <DocumentRenderer
-              templateSlug={templates.find((t: Template) => t.id === previewQuotation.template_id)?.slug || 'basic'}
-              data={{
-                type: 'quotation',
-                id: previewQuotation.id,
-                title: previewQuotation.title,
-                status: previewQuotation.status,
-                amount: Number(previewQuotation.amount),
-                currency: previewQuotation.currency || 'INR',
-                due_date: previewQuotation.due_date,
-                notes: previewQuotation.notes,
-                items: previewQuotation.quotation_items ?? [],
-                created_at: previewQuotation.created_at,
-              }}
-            />
-          )}
+          {previewQuotation && (() => {
+            // Don't render until org is loaded — prevents "Your Company" flash
+            if (orgLoading || !org) {
+              return (
+                <div className="flex items-center justify-center w-[794px] h-48">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary/40" />
+                </div>
+              );
+            }
+
+            // Resolve client: prefer embedded join, fall back to clients list
+            const resolvedClient =
+              previewQuotation.client ||
+              clients.find((c: Client) => c.id === previewQuotation.client_id);
+
+            console.log('RENDER DATA:', { org, client: resolvedClient, id: previewQuotation.id });
+
+            return (
+              <DocumentRenderer
+                templateSlug={
+                  templates.find((t: Template) => t.id === previewQuotation.template_id)?.slug ||
+                  templates.find((t: Template) => t.id === org?.template_id)?.slug ||
+                  'basic'
+                }
+                data={{
+                  type:       'quotation',
+                  id:         previewQuotation.id,
+                  title:      previewQuotation.title,
+                  status:     previewQuotation.status,
+                  amount:     Number(previewQuotation.amount),
+                  currency:   previewQuotation.currency || org.currency || 'INR',
+                  due_date:   previewQuotation.due_date,
+                  notes:      previewQuotation.notes,
+                  created_at: previewQuotation.created_at,
+                  items: (previewQuotation.quotation_items ?? []).map((i: any) => ({
+                    description: i.description,
+                    quantity:    Number(i.quantity) || 1,
+                    unit_price:  Number(i.unit_price) || 0,
+                    amount:      Number(i.amount) || Number(i.quantity) * Number(i.unit_price),
+                  })),
+                  org: {
+                    name:     org.name,
+                    logo_url: org.logo_url,
+                    address:  org.address,
+                    phone:    org.phone,
+                    email:    org.email,
+                  },
+                  client: resolvedClient ? {
+                    name:    resolvedClient.name,
+                    company: resolvedClient.company,
+                    email:   resolvedClient.email,
+                  } : undefined,
+                }}
+              />
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>

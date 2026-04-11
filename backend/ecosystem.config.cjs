@@ -3,10 +3,11 @@ module.exports = {
     {
       name: 'aurix-backend',
       script: 'src/index.js',
-      cwd: '/home/ubuntu/backend',
+      cwd: '/home/ubuntu/backend/backend',
       instances: 1,
       exec_mode: 'fork',
       node_args: '--experimental-vm-modules',
+      env_file: '.env',
       env: {
         NODE_ENV: 'production',
         PORT: 25569,

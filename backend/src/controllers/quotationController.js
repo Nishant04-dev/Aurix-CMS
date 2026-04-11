@@ -29,7 +29,7 @@ export async function getQuotations(req, res) {
 
     let query = supabase
       .from('quotations')
-      .select('*, quotation_items(*)')
+      .select('*, quotation_items(*), client:clients(id, name, company, email)')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false });
 
@@ -267,36 +267,56 @@ export async function sendQuotationByEmail(req, res) {
     }
 
     const { data: quotation } = await supabase
-      .from('quotations').select('id, title, amount, currency, due_date, client_id')
+      .from('quotations').select('id, title, amount, currency, due_date, client_id, status')
       .eq('id', id).eq('org_id', orgId).maybeSingle();
     if (!quotation) return notFound(res, 'Quotation not found');
+
+    if (quotation.status === 'converted') {
+      return badRequest(res, 'Converted quotations cannot be sent');
+    }
 
     const [{ data: client }, { data: org }] = await Promise.all([
       supabase.from('clients').select('name, email').eq('id', quotation.client_id).single(),
       supabase.from('organizations').select('name').eq('id', orgId).single(),
     ]);
 
-    if (!client?.email) return badRequest(res, 'Client has no email address');
+    if (!client?.email) {
+      return badRequest(res, 'Client has no email address. Add an email to the client first.');
+    }
 
-    const { sendQuotationEmail } = await import('../services/mailService.js');
-    await sendQuotationEmail({
-      toEmail:      client.email,
-      clientName:   client.name,
-      orgName:      org?.name || 'Your Agency',
-      quotationId:  quotation.id,
-      title:        quotation.title,
-      amount:       quotation.amount,
-      currency:     quotation.currency,
-      dueDate:      quotation.due_date,
-      appUrl:       process.env.APP_URL,
-    });
+    let emailSent = false;
+    try {
+      const { sendQuotationEmail } = await import('../services/mailService.js');
+      await sendQuotationEmail({
+        toEmail:      client.email,
+        clientName:   client.name,
+        orgName:      org?.name || 'Your Agency',
+        quotationId:  quotation.id,
+        title:        quotation.title,
+        amount:       quotation.amount,
+        currency:     quotation.currency,
+        dueDate:      quotation.due_date,
+        appUrl:       process.env.APP_URL,
+      });
+      emailSent = true;
+    } catch (mailErr) {
+      logger.warn('sendQuotationByEmail: mail delivery failed', { err: mailErr.message });
+    }
 
-    // Auto-mark as sent
-    await supabase.from('quotations').update({ status: 'sent', updated_at: new Date().toISOString() })
-      .eq('id', id).eq('org_id', orgId).eq('status', 'draft');
+    // Auto-mark as sent regardless of email delivery (status update is the source of truth)
+    if (quotation.status === 'draft') {
+      await supabase.from('quotations')
+        .update({ status: 'sent', updated_at: new Date().toISOString() })
+        .eq('id', id).eq('org_id', orgId);
+    }
 
     logAudit({ orgId, actorId: req.user.id, action: 'quotation.emailed', targetType: 'quotation', targetId: id });
-    return ok(res, null, `Quotation sent to ${client.email}`);
+
+    const message = emailSent
+      ? `Quotation sent to ${client.email}`
+      : `Quotation marked as sent (email delivery failed — check SMTP config)`;
+
+    return ok(res, { emailSent, clientEmail: client.email }, message);
   } catch (err) {
     logger.error('sendQuotationByEmail error', { err: err.message });
     return serverError(res, err.message);

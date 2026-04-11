@@ -19,6 +19,7 @@ import {
   XCircle, 
   RefreshCcw,
   Trash2,
+  Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { InvoiceStatus } from '@/types';
@@ -75,6 +76,15 @@ export default function Invoices() {
     }
   };
 
+  const handleSendEmail = async (id: string) => {
+    try {
+      await api.post(`/invoices/${id}/send`, {});
+      toast({ title: 'Invoice sent', description: 'Email delivered to client.' });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Email failed', description: err.message });
+    }
+  };
+
   const handleDelete = async (id: string) => {
     try {
       await api.delete(`/invoices/${id}`);
@@ -119,6 +129,9 @@ export default function Invoices() {
               </DropdownMenuItem>
             }
           />
+          <DropdownMenuItem onClick={() => handleSendEmail(invoice.id)}>
+            <Mail className="h-4 w-4 mr-2" /> Send to Client
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => updateStatus(invoice.id, 'paid')} disabled={invoice.status === 'paid'}>
             <CheckCircle className="h-4 w-4 mr-2" /> Mark as Paid
@@ -218,7 +231,8 @@ export default function Invoices() {
                 </tr>
               )}
               {activeInvoices.map((inv) => {
-                const client = clients?.find(c => c.id === inv.clientId);
+                // Use embedded client from API join, fall back to client list lookup
+                const client = (inv as any).client || clients?.find(c => c.id === (inv as any).client_id || c.id === inv.clientId);
                 const status = statusStyles[inv.status] || statusStyles.pending;
                 const StatusIcon = status.icon;
                 
@@ -326,7 +340,7 @@ export default function Invoices() {
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50/50 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm opacity-70">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-100/50">
                     <th className="text-left px-6 py-3 font-bold text-slate-500 uppercase tracking-widest text-[10px]">Reference</th>
@@ -337,7 +351,7 @@ export default function Invoices() {
                 </thead>
                 <tbody className="divide-y divide-slate-200/50">
                   {cancelledInvoices.map((inv) => {
-                    const client = clients?.find(c => c.id === inv.clientId);
+                    const client = (inv as any).client || clients?.find(c => c.id === (inv as any).client_id || c.id === inv.clientId);
                     return (
                       <tr key={inv.id} className="hover:bg-slate-100/50 transition-colors">
                         <td className="px-6 py-3">
