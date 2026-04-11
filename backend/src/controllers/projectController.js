@@ -47,11 +47,22 @@ export async function createProject(req, res) {
     }
 
     // Direct insert when Redis is disabled
+    const insertPayload = {
+      ...data,
+      org_id:     orgId,
+      created_by: userId || null,
+    };
+    console.log('PROJECT PAYLOAD:', JSON.stringify(insertPayload));
+
     const { data: project, error } = await supabase
       .from('projects')
-      .insert({ ...data, org_id: orgId, created_by: userId })
+      .insert(insertPayload)
       .select().single();
-    if (error) throw error;
+    if (error) {
+      console.error('PROJECT INSERT ERROR:', error.message, error.details, error.hint);
+      throw error;
+    }
+    console.log('PROJECT RESULT:', project?.id);
 
     // Auto-create project chat channel
     const { data: channel } = await supabase
