@@ -13,11 +13,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Loader2, Building2, Globe, DollarSign, Settings2, Upload, X,
-  CheckCircle2, ImageIcon, CreditCard, Palette,
+  CheckCircle2, ImageIcon, CreditCard, Palette, Percent, Trash2, Plus,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_CURRENCIES } from '@/lib/currency';
 import { cn } from '@/lib/utils';
+import { useTaxes } from '@/hooks/use-taxes';
 
 const TIMEZONES = [
   'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
@@ -366,6 +367,90 @@ function OrgSettingsForm() {
   );
 }
 
+// ── Taxes section ─────────────────────────────────────────────
+function TaxesSection() {
+  const { taxes, isLoading, createTax, deleteTax } = useTaxes();
+  const { isAdmin } = usePermissions();
+  const { toast } = useToast();
+  const [name, setName] = useState('');
+  const [percentage, setPercentage] = useState('');
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !percentage) return;
+    try {
+      await createTax.mutateAsync({ name: name.trim(), percentage: Number(percentage) });
+      setName('');
+      setPercentage('');
+      toast({ title: 'Tax added' });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    }
+  };
+
+  return (
+    <Card className="border-border/50 shadow-sm">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Percent className="h-4 w-4 text-primary" /> Taxes
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-primary/40" /></div>
+        ) : (
+          <div className="space-y-2">
+            {taxes.length === 0 && (
+              <p className="text-sm text-muted-foreground">No taxes configured yet.</p>
+            )}
+            {taxes.map(t => (
+              <div key={t.id} className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
+                <span className="text-sm font-medium">{t.name}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-mono text-muted-foreground">{t.percentage}%</span>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => deleteTax.mutate(t.id)}
+                      disabled={deleteTax.isPending}
+                      className="text-destructive hover:text-destructive/80 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {isAdmin && (
+          <form onSubmit={handleAdd} className="flex gap-2 pt-2">
+            <Input
+              placeholder="Tax name (e.g. GST)"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="flex-1"
+            />
+            <Input
+              type="number"
+              placeholder="%"
+              value={percentage}
+              onChange={e => setPercentage(e.target.value)}
+              className="w-20"
+              min="0"
+              max="100"
+              step="0.01"
+            />
+            <Button type="submit" size="sm" disabled={createTax.isPending || !name || !percentage}>
+              {createTax.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            </Button>
+          </form>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main Settings layout ──────────────────────────────────────
 export default function Settings() {
   return (
@@ -384,8 +469,9 @@ export default function Settings() {
         </div>
 
         {/* Right content */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 space-y-6">
           <OrgSettingsForm />
+          <TaxesSection />
         </div>
       </div>
     </div>

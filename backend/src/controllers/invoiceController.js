@@ -13,13 +13,19 @@ async function getInvoiceQueue() {
 }
 
 const CreateInvoiceSchema = z.object({
-  client_id:   z.string().uuid(),
-  project_id:  z.string().uuid().optional().nullable(),
-  amount:      z.number().positive(),
-  due_date:    z.string(),
-  description: z.string().optional().nullable(),
-  status:      z.enum(['pending','paid','overdue','on_hold','cancelled']).default('pending'),
-  items:       z.array(z.object({
+  client_id:    z.string().uuid(),
+  project_id:   z.string().uuid().optional().nullable(),
+  amount:       z.number().positive(),
+  due_date:     z.string(),
+  description:  z.string().optional().nullable(),
+  status:       z.enum(['pending','paid','overdue','on_hold','cancelled']).default('pending'),
+  tax_snapshot: z.array(z.object({
+    id:         z.string(),
+    name:       z.string(),
+    percentage: z.number(),
+    amount:     z.number(),
+  })).optional().default([]),
+  items: z.array(z.object({
     description: z.string(),
     quantity:    z.number().positive().optional().default(1),
     unit_price:  z.number().min(0).optional(),
@@ -53,14 +59,15 @@ export async function createInvoice(req, res) {
     const { data: invoice, error } = await supabase
       .from('invoices')
       .insert({
-        client_id:   data.client_id,
-        project_id:  data.project_id || null,
-        amount:      data.amount,
-        due_date:    data.due_date,
-        status:      data.status,
-        description: data.description || null,
-        org_id:      orgId,
-        created_by:  userId,
+        client_id:    data.client_id,
+        project_id:   data.project_id || null,
+        amount:       data.amount,
+        due_date:     data.due_date,
+        status:       data.status,
+        description:  data.description || null,
+        tax_snapshot: data.tax_snapshot ?? [],
+        org_id:       orgId,
+        created_by:   userId,
         currency,
       })
       .select().single();
@@ -101,7 +108,7 @@ export async function getInvoices(req, res) {
 
     let query = supabase
       .from('invoices')
-      .select('*, invoice_items(*), client:clients(id, name, company, email), project:projects(id, title)')
+      .select('*, invoice_items(*), client:clients(id, name, company, email, phone, address), project:projects(id, title)')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false });
 

@@ -13,6 +13,7 @@ import { uploadFile, getPublicUrl, createSignedUrl, deleteFile as deleteStorageF
 import { sendInvitation, respondToInvitation, getMyInvitations, lookupUserByDisplayId } from '../controllers/invitationController.js';
 import { createInvoice, getInvoices, updateInvoice, cancelInvoice, deleteInvoice, sendInvoiceByEmail } from '../controllers/invoiceController.js';
 import { getQuotations, createQuotation, updateQuotation, convertToInvoice, deleteQuotation, getTemplates, sendQuotationByEmail } from '../controllers/quotationController.js';
+import { getTaxes, createTax, deleteTax } from '../controllers/taxController.js';
 import { getClients, createClient, updateClient, deleteClient }      from '../controllers/clientController.js';
 import { getUsers, updateUser, deleteUser }                          from '../controllers/userController.js';
 import { getRoles, createRole, updateRole, deleteRole }                          from '../controllers/roleController.js';
@@ -90,6 +91,11 @@ router.post  ('/invoices/:id/send',     requireOrg, writeLimiter, sendInvoiceByE
 
 // ── Templates ─────────────────────────────────────────────────
 router.get('/templates', requireOrg, getTemplates);
+
+// ── Taxes ─────────────────────────────────────────────────────
+router.get   ('/taxes',     requireOrg, getTaxes);
+router.post  ('/taxes',     requireOrg, writeLimiter, createTax);
+router.delete('/taxes/:id', requireOrg, writeLimiter, deleteTax);
 
 // ── Quotations ────────────────────────────────────────────────
 router.get   ('/quotations',                  requireOrg, getQuotations);

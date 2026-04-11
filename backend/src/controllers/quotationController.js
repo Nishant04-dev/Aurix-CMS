@@ -11,13 +11,19 @@ const ItemSchema = z.object({
 });
 
 const CreateQuotationSchema = z.object({
-  client_id:   z.string().uuid(),
-  project_id:  z.string().uuid().optional().nullable(),
-  template_id: z.string().uuid().optional().nullable(),
-  title:       z.string().min(1).max(200).default('Quotation'),
-  due_date:    z.string().optional().nullable(),
-  notes:       z.string().max(2000).optional().nullable(),
-  items:       z.array(ItemSchema).min(1),
+  client_id:    z.string().uuid(),
+  project_id:   z.string().uuid().optional().nullable(),
+  template_id:  z.string().uuid().optional().nullable(),
+  title:        z.string().min(1).max(200).default('Quotation'),
+  due_date:     z.string().optional().nullable(),
+  notes:        z.string().max(2000).optional().nullable(),
+  items:        z.array(ItemSchema).min(1),
+  tax_snapshot: z.array(z.object({
+    id:         z.string(),
+    name:       z.string(),
+    percentage: z.number(),
+    amount:     z.number(),
+  })).optional().default([]),
 });
 
 // ── Get all quotations ────────────────────────────────────────
@@ -29,7 +35,7 @@ export async function getQuotations(req, res) {
 
     let query = supabase
       .from('quotations')
-      .select('*, quotation_items(*), client:clients(id, name, company, email)')
+      .select('*, quotation_items(*), client:clients(id, name, company, email, phone, address)')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false });
 
@@ -83,16 +89,17 @@ export async function createQuotation(req, res) {
     const { data: quotation, error } = await supabase
       .from('quotations')
       .insert({
-        org_id:      orgId,
-        client_id:   data.client_id,
-        template_id: data.template_id || null,
-        project_id:  data.project_id  || null,
-        title:       data.title,
-        due_date:    data.due_date || null,
-        notes:       data.notes || null,
-        amount:      total,
+        org_id:       orgId,
+        client_id:    data.client_id,
+        template_id:  data.template_id || null,
+        project_id:   data.project_id  || null,
+        title:        data.title,
+        due_date:     data.due_date || null,
+        notes:        data.notes || null,
+        amount:       total,
         currency,
-        created_by:  userId,
+        created_by:   userId,
+        tax_snapshot: data.tax_snapshot ?? [],
       })
       .select().single();
 

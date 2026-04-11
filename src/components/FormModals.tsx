@@ -27,6 +27,12 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { DocumentRenderer } from '@/components/DocumentRenderer';
 import { useOrganization } from '@/hooks/use-organization';
+import { useTaxes } from '@/hooks/use-taxes';
+
+function fmt(amount: number, currency = 'INR') {
+  try { return new Intl.NumberFormat('en-IN', { style: 'currency', currency, minimumFractionDigits: 2 }).format(amount); }
+  catch { return `${amount.toFixed(2)}`; }
+}
 
 interface FormModalProps {
   trigger?: React.ReactNode;
@@ -548,48 +554,71 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
   const [open, setOpen] = useState(false);
   const { data: clientsData, isLoading: clientsLoading } = useClients();
   const { data: projectsData, isLoading: projectsLoading } = useProjects();
+  const { data: taxes = [] } = useTaxes();
   const { orgId } = useAuth();
   const [form, setForm] = useState({
-    clientId:   initialData?.client_id  || initialData?.clientId  || '',
-    projectId:  initialData?.project_id || initialData?.projectId || '',
-    amount:     initialData?.amount?.toString() || '',
+    clientId:    initialData?.client_id  || initialData?.clientId  || '',
+    projectId:   initialData?.project_id || initialData?.projectId || '',
+    subtotal:    initialData?.amount?.toString() || '',
     description: initialData?.description || (initialData?.items?.[0]?.description || ''),
-    dueDate:    initialData?.due_date || initialData?.dueDate || '',
-    status:     (initialData?.status || 'pending') as InvoiceStatus,
+    dueDate:     initialData?.due_date || initialData?.dueDate || '',
+    status:      (initialData?.status || 'pending') as InvoiceStatus,
+    selectedTaxIds: [] as string[],
   });
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
+  // Compute tax lines and total from subtotal + selected taxes
+  const subtotalNum = Number(form.subtotal) || 0;
+  const taxLines = taxes
+    .filter(t => form.selectedTaxIds.includes(t.id))
+    .map(t => ({
+      id:         t.id,
+      name:       t.name,
+      percentage: t.percentage,
+      amount:     Math.round(subtotalNum * (t.percentage / 100) * 100) / 100,
+    }));
+  const totalAmount = subtotalNum + taxLines.reduce((s, t) => s + t.amount, 0);
+
   const handleProjectChange = (projectId: string) => {
-    const selectedProject = projectsData?.find((p: any) => p.id === projectId);
+    const p = (projectsData as any[] ?? []).find((x: any) => x.id === projectId);
+    setForm(f => ({ ...f, projectId, clientId: p?.client_id || f.clientId }));
+  };
+
+  const handleClientChange = (clientId: string) => {
+    setForm(f => ({ ...f, clientId }));
+  };
+
+  const toggleTax = (taxId: string) => {
     setForm(f => ({
       ...f,
-      projectId,
-      // Auto-fill client from project
-      clientId: selectedProject?.client_id || f.clientId,
+      selectedTaxIds: f.selectedTaxIds.includes(taxId)
+        ? f.selectedTaxIds.filter(id => id !== taxId)
+        : [...f.selectedTaxIds, taxId],
     }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.clientId || !form.amount) return;
+    if (!form.clientId || !form.subtotal) return;
     setIsSaving(true);
     try {
       const dbData = {
-        client_id:   form.clientId,
-        project_id:  form.projectId || null,
-        org_id:      orgId,
-        amount:      Number(form.amount),
-        due_date:    form.dueDate,
-        status:      form.status,
-        description: form.description || null,
+        client_id:    form.clientId,
+        project_id:   form.projectId || null,
+        org_id:       orgId,
+        amount:       totalAmount,
+        due_date:     form.dueDate,
+        status:       form.status,
+        description:  form.description || null,
+        tax_snapshot: taxLines,
       };
       if (initialData) {
         await api.patch(`/invoices/${initialData.id}`, dbData);
-        toast({ title: 'Invoice Updated', description: 'Changes saved successfully.' });
+        toast({ title: 'Invoice Updated' });
       } else {
         await api.post('/invoices', dbData);
-        toast({ title: 'Invoice Created', description: 'New invoice generated.' });
+        toast({ title: 'Invoice Created' });
       }
       setOpen(false);
       onSuccess?.();
@@ -608,22 +637,19 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
       title={initialData ? "Edit Invoice" : "Create Invoice"}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Project — optional, auto-fills client */}
         <FormField label="Project (optional)">
           <Select value={form.projectId || 'none'} onValueChange={v => handleProjectChange(v === 'none' ? '' : v)} disabled={projectsLoading || isSaving}>
             <SelectTrigger><SelectValue placeholder="Select project (optional)" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">No project</SelectItem>
-              {(projectsData as any[] ?? []).map((p: any) => (
-                <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
-              ))}
+              {(projectsData as any[] ?? []).map((p: any) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
             </SelectContent>
           </Select>
         </FormField>
         <FormField label="Client">
-          <Select value={form.clientId} onValueChange={v => setForm(f => ({ ...f, clientId: v }))} disabled={clientsLoading || isSaving}>
+          <Select value={form.clientId} onValueChange={handleClientChange} disabled={clientsLoading || isSaving}>
             <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-            <SelectContent>{clientsData?.map(c => <SelectItem key={c.id} value={c.id}>{c.name} - {c.company}</SelectItem>)}</SelectContent>
+            <SelectContent>{clientsData?.map(c => <SelectItem key={c.id} value={c.id}>{c.name} — {c.company}</SelectItem>)}</SelectContent>
           </Select>
         </FormField>
         <div className="grid grid-cols-2 gap-4">
@@ -639,10 +665,38 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
               </SelectContent>
             </Select>
           </FormField>
-          <FormField label="Amount">
-            <Input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} disabled={isSaving} />
+          <FormField label="Subtotal">
+            <Input type="number" value={form.subtotal} onChange={e => setForm(f => ({ ...f, subtotal: e.target.value }))} disabled={isSaving} />
           </FormField>
         </div>
+        {taxes.length > 0 && (
+          <FormField label="Apply Taxes">
+            <div className="space-y-1.5">
+              {taxes.map(t => (
+                <label key={t.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.selectedTaxIds.includes(t.id)}
+                    onChange={() => toggleTax(t.id)}
+                    disabled={isSaving}
+                    className="rounded"
+                  />
+                  {t.name} ({t.percentage}%)
+                  {form.selectedTaxIds.includes(t.id) && subtotalNum > 0 && (
+                    <span className="text-xs text-muted-foreground ml-auto">
+                      +{fmt(subtotalNum * t.percentage / 100, 'INR')}
+                    </span>
+                  )}
+                </label>
+              ))}
+              {taxLines.length > 0 && (
+                <div className="text-xs font-semibold pt-1 border-t">
+                  Total: {totalAmount.toFixed(2)}
+                </div>
+              )}
+            </div>
+          </FormField>
+        )}
         <FormField label="Description">
           <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} disabled={isSaving} />
         </FormField>
@@ -718,17 +772,21 @@ export function InvoiceDetailsModal({ invoice, client: clientProp, trigger }: { 
               notes:      invoice.notes || null,
               created_at: invoice.created_at || invoice.createdAt,
               items,
+              taxes:      Array.isArray(invoice.tax_snapshot) ? invoice.tax_snapshot : [],
               org: {
-                name:     org.name,
-                logo_url: org.logo_url,
-                address:  org.address,
-                phone:    org.phone,
-                email:    org.email,
+                name:       org.name,
+                logo_url:   org.logo_url,
+                address:    org.address,
+                phone:      org.phone,
+                email:      org.email,
+                gst_number: org.gst_number,
               },
               client: client ? {
                 name:    client.name,
                 company: client.company,
                 email:   client.email,
+                phone:   client.phone,
+                address: client.address,
               } : undefined,
               project: invoice.project ?? null,
             }}

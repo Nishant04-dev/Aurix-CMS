@@ -9,6 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Download, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+export interface TaxLine {
+  id: string;
+  name: string;
+  percentage: number;
+  amount: number;
+}
+
 export interface DocumentData {
   type: 'invoice' | 'quotation';
   id: string;
@@ -19,8 +26,9 @@ export interface DocumentData {
   due_date?: string | null;
   notes?: string | null;
   items?: { description: string; quantity?: number; unit_price?: number; amount?: number }[];
-  org?: { name?: string; logo_url?: string; address?: string; phone?: string; email?: string };
-  client?: { name?: string; company?: string; email?: string; phone?: string };
+  taxes?: TaxLine[];
+  org?: { name?: string; logo_url?: string; address?: string; phone?: string; email?: string; gst_number?: string };
+  client?: { name?: string; company?: string; email?: string; phone?: string; address?: string };
   project?: { id?: string; title?: string } | null;
   created_at?: string;
 }
@@ -72,16 +80,18 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
   const orgAddress = orgData?.address ?? null;
   const orgPhone   = orgData?.phone ?? null;
   const orgEmail   = orgData?.email ?? null;
+  const orgGst     = orgData?.gst_number ?? null;
 
   const clientCompany = clientData?.company ?? null;
   const clientName    = clientData?.name ?? null;
   const clientEmail   = clientData?.email ?? null;
+  const clientPhone   = clientData?.phone ?? null;
+  const clientAddress = clientData?.address ?? null;
 
-  // Debug — remove once confirmed working in production
-  console.log('DocumentRenderer — org:', orgData, '| client:', clientData);
-
-  const items = data.items ?? [];
+  const taxes   = data.taxes ?? [];
+  const items   = data.items ?? [];
   const subtotal = items.reduce((s, i) => s + (i.amount ?? (i.quantity ?? 1) * (i.unit_price ?? 0)), 0);
+  const taxTotal = taxes.reduce((s, t) => s + t.amount, 0);
 
   const handleDownload = async () => {
     if (!ref.current) return;
@@ -151,6 +161,7 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
                   {orgAddress && <div>{orgAddress}</div>}
                   {orgEmail   && <div>{orgEmail}</div>}
                   {orgPhone   && <div>{orgPhone}</div>}
+                  {orgGst     && <div>GST: {orgGst}</div>}
                 </div>
               </div>
               <div className="text-right">
@@ -186,13 +197,11 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
               {clientCompany && clientName && (
                 <div className="text-xs text-gray-500">{clientName}</div>
               )}
-              {clientEmail && (
-                <div className="text-xs text-gray-500">{clientEmail}</div>
-              )}
+              {clientPhone && <div className="text-xs text-gray-500">{clientPhone}</div>}
+              {clientEmail && <div className="text-xs text-gray-500">{clientEmail}</div>}
+              {clientAddress && <div className="text-xs text-gray-500">{clientAddress}</div>}
               {data.project?.title && (
-                <div className="text-xs text-gray-400 mt-1">
-                  Project: {data.project.title}
-                </div>
+                <div className="text-xs text-gray-400 mt-1">Project: {data.project.title}</div>
               )}
             </div>
             <div className="text-right text-xs text-gray-500">
@@ -238,11 +247,17 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
 
             {/* Totals */}
             <div className="mt-4 flex justify-end">
-              <div className="w-48 space-y-1">
+              <div className="w-56 space-y-1">
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Subtotal</span>
                   <span>{fmt(subtotal, data.currency)}</span>
                 </div>
+                {taxes.map(t => (
+                  <div key={t.id} className="flex justify-between text-xs">
+                    <span className="text-gray-400">{t.name} ({t.percentage}%)</span>
+                    <span>{fmt(t.amount, data.currency)}</span>
+                  </div>
+                ))}
                 <div
                   className="flex justify-between font-bold text-sm pt-1"
                   style={{ borderTop: `2px solid ${cfg.accent}` }}

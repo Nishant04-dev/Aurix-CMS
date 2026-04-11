@@ -409,17 +409,21 @@ export default function Quotations() {
                     amount:      Number(i.amount) || Number(i.quantity) * Number(i.unit_price),
                   })),
                   org: {
-                    name:     org.name,
-                    logo_url: org.logo_url,
-                    address:  org.address,
-                    phone:    org.phone,
-                    email:    org.email,
+                    name:       org.name,
+                    logo_url:   org.logo_url,
+                    address:    org.address,
+                    phone:      org.phone,
+                    email:      org.email,
+                    gst_number: org.gst_number,
                   },
                   client: resolvedClient ? {
                     name:    resolvedClient.name,
                     company: resolvedClient.company,
                     email:   resolvedClient.email,
+                    phone:   resolvedClient.phone,
+                    address: resolvedClient.address,
                   } : undefined,
+                  taxes: Array.isArray(previewQuotation.tax_snapshot) ? previewQuotation.tax_snapshot : [],
                 }}
               />
             );
