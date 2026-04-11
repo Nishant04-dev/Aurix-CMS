@@ -1,27 +1,20 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/apiClient';
-import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, getCurrency, type Currency } from '@/lib/currency';
+import { useOrganization, ORG_QUERY_KEY } from '@/hooks/use-organization';
+import { useMutation } from '@tanstack/react-query';
 
 export function useOrgCurrency() {
-  const { orgId } = useAuth();
   const queryClient = useQueryClient();
-
-  const { data: currencyCode = 'INR' } = useQuery({
-    queryKey: ['org_currency', orgId],
-    queryFn: async () => {
-      const org = await api.get<{ currency: string }>('/organizations');
-      return org?.currency ?? 'INR';
-    },
-    enabled: !!orgId,
-    staleTime: 5 * 60 * 1000,
-  });
+  // Derive currency from the shared org cache — no separate fetch
+  const { data: org } = useOrganization();
+  const currencyCode = org?.currency ?? 'INR';
 
   const updateCurrency = useMutation({
     mutationFn: (newCurrency: string) => api.patch('/organizations', { currency: newCurrency }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['org_currency', orgId] });
-      queryClient.invalidateQueries({ queryKey: ['org_settings', orgId] });
+      queryClient.invalidateQueries({ queryKey: ORG_QUERY_KEY });
+      queryClient.refetchQueries({ queryKey: ORG_QUERY_KEY });
     },
   });
 

@@ -37,10 +37,9 @@ export function useOrgSettings() {
     mutationFn: (updates: Partial<Omit<OrgSettings, 'id' | 'plan' | 'status'>>) =>
       api.patch('/organizations', updates),
     onSuccess: () => {
-      // Single invalidation — covers useOrganization + useOrgSettings + useOrgCurrency
+      // Force immediate refetch — invalidate alone can leave stale data in cache
       queryClient.invalidateQueries({ queryKey: ORG_QUERY_KEY });
-      queryClient.invalidateQueries({ queryKey: ['org_settings'] });
-      queryClient.invalidateQueries({ queryKey: ['org_currency'] });
+      queryClient.refetchQueries({ queryKey: ORG_QUERY_KEY });
     },
   });
 

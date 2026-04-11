@@ -128,11 +128,12 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
           ref={ref}
           id="document-render"
           style={{
-            background:  cfg.bg,
-            fontFamily:  cfg.font,
-            color:       cfg.headerText === '#ffffff' ? '#1e293b' : cfg.headerText,
-            width:       '794px',
-            minHeight:   '1123px',
+            background: cfg.bg,
+            fontFamily: cfg.font,
+            // Body text is always dark — headerText only applies inside the header div
+            color:      cfg.bg === '#1e293b' ? '#f8fafc' : '#1e293b',
+            width:      '794px',
+            minHeight:  '1123px',
           }}
           className={cn('rounded-xl shadow-sm border', compact ? 'text-xs' : 'text-sm')}
         >
@@ -144,7 +145,7 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
                   ? <img src={orgLogo} alt="logo" className="h-10 mb-2 object-contain" />
                   : <div className="text-xl font-bold mb-1">{orgName || 'Your Company'}</div>
                 }
-                <div className="text-xs space-y-0.5" style={{ opacity: 0.75 }}>
+                <div className="text-xs space-y-0.5" style={{ color: cfg.headerText, opacity: 0.85 }}>
                   {orgAddress && <div>{orgAddress}</div>}
                   {orgEmail   && <div>{orgEmail}</div>}
                   {orgPhone   && <div>{orgPhone}</div>}
@@ -154,7 +155,7 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
                 <div className="text-2xl font-bold uppercase tracking-wider">
                   {data.type === 'invoice' ? 'Invoice' : (data.title || 'Quotation')}
                 </div>
-                <div className="text-xs mt-1" style={{ opacity: 0.7 }}>
+                <div className="text-xs mt-1" style={{ color: cfg.headerText, opacity: 0.75 }}>
                   #{data.id.slice(0, 8).toUpperCase()}
                 </div>
                 <div
@@ -181,22 +182,22 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
               </div>
               <div className="font-semibold">{clientCompany || clientName || '—'}</div>
               {clientCompany && clientName && (
-                <div className="text-xs" style={{ opacity: 0.7 }}>{clientName}</div>
+                <div className="text-xs text-gray-500">{clientName}</div>
               )}
               {clientEmail && (
-                <div className="text-xs" style={{ opacity: 0.7 }}>{clientEmail}</div>
+                <div className="text-xs text-gray-500">{clientEmail}</div>
               )}
             </div>
-            <div className="text-right text-xs" style={{ opacity: 0.8 }}>
+            <div className="text-right text-xs text-gray-500">
               {data.created_at && (
                 <div className="mb-1">
-                  <span style={{ opacity: 0.6 }}>Date: </span>
+                  <span className="text-gray-400">Date: </span>
                   {safeDate(data.created_at)}
                 </div>
               )}
               {data.due_date && (
                 <div>
-                  <span style={{ opacity: 0.6 }}>Due: </span>
+                  <span className="text-gray-400">Due: </span>
                   {safeDate(data.due_date)}
                 </div>
               )}
@@ -232,7 +233,7 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
             <div className="mt-4 flex justify-end">
               <div className="w-48 space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span style={{ opacity: 0.6 }}>Subtotal</span>
+                  <span className="text-gray-400">Subtotal</span>
                   <span>{fmt(subtotal, data.currency)}</span>
                 </div>
                 <div
@@ -251,7 +252,7 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
                 className="mt-6 p-3 rounded text-xs"
                 style={{ background: cfg.tableHeaderBg, borderLeft: `3px solid ${cfg.accent}` }}
               >
-                <div className="font-bold mb-1 uppercase tracking-widest text-[10px]" style={{ opacity: 0.6 }}>
+                <div className="font-bold mb-1 uppercase tracking-widest text-[10px] text-gray-400">
                   Notes
                 </div>
                 {data.notes}
