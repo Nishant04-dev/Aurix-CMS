@@ -72,7 +72,7 @@ export async function createProject(req, res) {
     logAudit({ orgId, actorId: userId, action: 'project.created', targetType: 'project', targetId: project.id, metadata: { title: project.title } });
 
     await supabase.from('notifications').insert({
-      user_id: userId, title: 'Project Created',
+      user_id: userId, org_id: orgId, title: 'Project Created',
       message: `Project "${project.title}" has been created successfully.`,
     });
 
