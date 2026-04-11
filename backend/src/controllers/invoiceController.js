@@ -12,10 +12,16 @@ async function getInvoiceQueue() {
   return invoiceQueue;
 }
 
+const ItemSchema = z.object({
+  description: z.string().min(1),
+  quantity:    z.number().positive().default(1),
+  unit_price:  z.number().min(0),
+});
+
 const CreateInvoiceSchema = z.object({
   client_id:    z.string().uuid(),
   project_id:   z.string().uuid().optional().nullable(),
-  amount:       z.number().positive(),
+  amount:       z.number().min(0).optional(), // computed from items if not provided
   due_date:     z.string(),
   description:  z.string().optional().nullable(),
   status:       z.enum(['pending','paid','overdue','on_hold','cancelled']).default('pending'),
@@ -25,12 +31,7 @@ const CreateInvoiceSchema = z.object({
     percentage: z.number(),
     amount:     z.number(),
   })).optional().default([]),
-  items: z.array(z.object({
-    description: z.string(),
-    quantity:    z.number().positive().optional().default(1),
-    unit_price:  z.number().min(0).optional(),
-    amount:      z.number().optional(),
-  })).optional(),
+  items: z.array(ItemSchema).optional().default([]),
 });
 
 export async function createInvoice(req, res) {
@@ -55,13 +56,22 @@ export async function createInvoice(req, res) {
       return created(res, { jobId: job.id }, 'Invoice creation queued');
     }
 
+    // Compute subtotal from items; fall back to provided amount
+    const itemsSubtotal = data.items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
+    const taxTotal = (data.tax_snapshot ?? []).reduce((s, t) => s + t.amount, 0);
+    const finalAmount = data.amount ?? (itemsSubtotal + taxTotal);
+
+    if (finalAmount <= 0 && data.items.length === 0) {
+      return badRequest(res, 'Provide at least one item or an amount');
+    }
+
     // Direct insert when Redis is disabled
     const { data: invoice, error } = await supabase
       .from('invoices')
       .insert({
         client_id:    data.client_id,
         project_id:   data.project_id || null,
-        amount:       data.amount,
+        amount:       finalAmount,
         due_date:     data.due_date,
         status:       data.status,
         description:  data.description || null,
@@ -74,15 +84,15 @@ export async function createInvoice(req, res) {
 
     if (error) throw error;
 
-    // Insert line items if provided
-    if (data.items?.length) {
+    // Insert line items
+    if (data.items.length) {
       await supabase.from('invoice_items').insert(
         data.items.map(item => ({
           invoice_id:  invoice.id,
           description: item.description,
-          quantity:    item.quantity ?? 1,
-          unit_price:  item.unit_price ?? 0,
-          amount:      item.amount ?? (item.quantity ?? 1) * (item.unit_price ?? 0),
+          quantity:    item.quantity,
+          unit_price:  item.unit_price,
+          amount:      item.quantity * item.unit_price,
         }))
       );
     }

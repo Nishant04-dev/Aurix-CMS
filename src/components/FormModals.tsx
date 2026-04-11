@@ -556,68 +556,67 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
   const { data: projectsData, isLoading: projectsLoading } = useProjects();
   const { data: taxes = [] } = useTaxes();
   const { orgId } = useAuth();
+
+  type LineItem = { description: string; quantity: number; unit_price: number };
+  const [items, setItems] = useState<LineItem[]>(
+    initialData?.invoice_items?.length
+      ? initialData.invoice_items.map((i: any) => ({ description: i.description, quantity: Number(i.quantity) || 1, unit_price: Number(i.unit_price) || 0 }))
+      : [{ description: '', quantity: 1, unit_price: 0 }]
+  );
   const [form, setForm] = useState({
-    clientId:    initialData?.client_id  || initialData?.clientId  || '',
-    projectId:   initialData?.project_id || initialData?.projectId || '',
-    subtotal:    initialData?.amount?.toString() || '',
-    description: initialData?.description || (initialData?.items?.[0]?.description || ''),
-    dueDate:     initialData?.due_date || initialData?.dueDate || '',
-    status:      (initialData?.status || 'pending') as InvoiceStatus,
+    clientId:       initialData?.client_id  || initialData?.clientId  || '',
+    projectId:      initialData?.project_id || initialData?.projectId || '',
+    dueDate:        initialData?.due_date   || initialData?.dueDate   || '',
+    status:         (initialData?.status || 'pending') as InvoiceStatus,
+    notes:          initialData?.notes || '',
     selectedTaxIds: [] as string[],
   });
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
-  // Compute tax lines and total from subtotal + selected taxes
-  const subtotalNum = Number(form.subtotal) || 0;
+  // Auto-calculate subtotal from items
+  const subtotal = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
   const taxLines = taxes
     .filter(t => form.selectedTaxIds.includes(t.id))
-    .map(t => ({
-      id:         t.id,
-      name:       t.name,
-      percentage: t.percentage,
-      amount:     Math.round(subtotalNum * (t.percentage / 100) * 100) / 100,
-    }));
-  const totalAmount = subtotalNum + taxLines.reduce((s, t) => s + t.amount, 0);
+    .map(t => ({ id: t.id, name: t.name, percentage: t.percentage, amount: Math.round(subtotal * (t.percentage / 100) * 100) / 100 }));
+  const total = subtotal + taxLines.reduce((s, t) => s + t.amount, 0);
+
+  const updateItem = (idx: number, field: keyof LineItem, value: string | number) =>
+    setItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
 
   const handleProjectChange = (projectId: string) => {
     const p = (projectsData as any[] ?? []).find((x: any) => x.id === projectId);
     setForm(f => ({ ...f, projectId, clientId: p?.client_id || f.clientId }));
   };
 
-  const handleClientChange = (clientId: string) => {
-    setForm(f => ({ ...f, clientId }));
-  };
-
-  const toggleTax = (taxId: string) => {
+  const toggleTax = (taxId: string) =>
     setForm(f => ({
       ...f,
       selectedTaxIds: f.selectedTaxIds.includes(taxId)
         ? f.selectedTaxIds.filter(id => id !== taxId)
         : [...f.selectedTaxIds, taxId],
     }));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.clientId || !form.subtotal) return;
+    if (!form.clientId) return toast({ variant: 'destructive', title: 'Select a client' });
+    if (items.some(i => !i.description)) return toast({ variant: 'destructive', title: 'All items need a description' });
     setIsSaving(true);
     try {
-      const dbData = {
+      const payload = {
         client_id:    form.clientId,
         project_id:   form.projectId || null,
         org_id:       orgId,
-        amount:       totalAmount,
         due_date:     form.dueDate,
         status:       form.status,
-        description:  form.description || null,
         tax_snapshot: taxLines,
+        items:        items.map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price })),
       };
       if (initialData) {
-        await api.patch(`/invoices/${initialData.id}`, dbData);
+        await api.patch(`/invoices/${initialData.id}`, payload);
         toast({ title: 'Invoice Updated' });
       } else {
-        await api.post('/invoices', dbData);
+        await api.post('/invoices', payload);
         toast({ title: 'Invoice Created' });
       }
       setOpen(false);
@@ -630,88 +629,160 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
   };
 
   return (
-    <FormModal
-      open={open}
-      onOpenChange={setOpen}
-      trigger={trigger || <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Create Invoice</Button>}
-      title={initialData ? "Edit Invoice" : "Create Invoice"}
-    >
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <FormField label="Project (optional)">
-          <Select value={form.projectId || 'none'} onValueChange={v => handleProjectChange(v === 'none' ? '' : v)} disabled={projectsLoading || isSaving}>
-            <SelectTrigger><SelectValue placeholder="Select project (optional)" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No project</SelectItem>
-              {(projectsData as any[] ?? []).map((p: any) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </FormField>
-        <FormField label="Client">
-          <Select value={form.clientId} onValueChange={handleClientChange} disabled={clientsLoading || isSaving}>
-            <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-            <SelectContent>{clientsData?.map(c => <SelectItem key={c.id} value={c.id}>{c.name} — {c.company}</SelectItem>)}</SelectContent>
-          </Select>
-        </FormField>
-        <div className="grid grid-cols-2 gap-4">
-          <FormField label="Status">
-            <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as InvoiceStatus }))} disabled={isSaving}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-                <SelectItem value="overdue">Overdue</SelectItem>
-                <SelectItem value="on_hold">On Hold</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-          </FormField>
-          <FormField label="Subtotal">
-            <Input type="number" value={form.subtotal} onChange={e => setForm(f => ({ ...f, subtotal: e.target.value }))} disabled={isSaving} />
-          </FormField>
-        </div>
-        {taxes.length > 0 && (
-          <FormField label="Apply Taxes">
-            <div className="space-y-1.5">
-              {taxes.map(t => (
-                <label key={t.id} className="flex items-center gap-2 cursor-pointer text-sm">
-                  <input
-                    type="checkbox"
-                    checked={form.selectedTaxIds.includes(t.id)}
-                    onChange={() => toggleTax(t.id)}
-                    disabled={isSaving}
-                    className="rounded"
-                  />
-                  {t.name} ({t.percentage}%)
-                  {form.selectedTaxIds.includes(t.id) && subtotalNum > 0 && (
-                    <span className="text-xs text-muted-foreground ml-auto">
-                      +{fmt(subtotalNum * t.percentage / 100, 'INR')}
-                    </span>
-                  )}
-                </label>
-              ))}
-              {taxLines.length > 0 && (
-                <div className="text-xs font-semibold pt-1 border-t">
-                  Total: {totalAmount.toFixed(2)}
-                </div>
-              )}
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {trigger || <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Create Invoice</Button>}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle className="text-base">{initialData ? 'Edit Invoice' : 'Create Invoice'}</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Project + Client */}
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Project (optional)">
+              <Select value={form.projectId || 'none'} onValueChange={v => handleProjectChange(v === 'none' ? '' : v)} disabled={projectsLoading || isSaving}>
+                <SelectTrigger><SelectValue placeholder="No project" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No project</SelectItem>
+                  {(projectsData as any[] ?? []).map((p: any) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Client">
+              <Select value={form.clientId} onValueChange={v => setForm(f => ({ ...f, clientId: v }))} disabled={clientsLoading || isSaving}>
+                <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
+                <SelectContent>{clientsData?.map(c => <SelectItem key={c.id} value={c.id}>{c.name} — {c.company}</SelectItem>)}</SelectContent>
+              </Select>
+            </FormField>
+          </div>
+
+          {/* Status + Due Date */}
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Status">
+              <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as InvoiceStatus }))} disabled={isSaving}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="overdue">Overdue</SelectItem>
+                  <SelectItem value="on_hold">On Hold</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Due Date">
+              <Input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} disabled={isSaving} />
+            </FormField>
+          </div>
+
+          {/* Line Items */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Items</label>
+            <div className="rounded-lg border border-border/50 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/30">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Description</th>
+                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-20">Qty</th>
+                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">Unit Price</th>
+                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">Total</th>
+                    <th className="w-8" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {items.map((item, idx) => (
+                    <tr key={idx}>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          value={item.description}
+                          onChange={e => updateItem(idx, 'description', e.target.value)}
+                          placeholder="Service description"
+                          disabled={isSaving}
+                          className="h-8 border-0 shadow-none focus-visible:ring-0 px-1"
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          type="number" min="1"
+                          value={item.quantity}
+                          onChange={e => updateItem(idx, 'quantity', Number(e.target.value) || 1)}
+                          disabled={isSaving}
+                          className="h-8 border-0 shadow-none focus-visible:ring-0 px-1 text-right"
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          type="number" min="0" step="0.01"
+                          value={item.unit_price}
+                          onChange={e => updateItem(idx, 'unit_price', Number(e.target.value) || 0)}
+                          disabled={isSaving}
+                          className="h-8 border-0 shadow-none focus-visible:ring-0 px-1 text-right"
+                        />
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono text-xs font-semibold">
+                        {(item.quantity * item.unit_price).toFixed(2)}
+                      </td>
+                      <td className="px-1 py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => items.length > 1 && setItems(prev => prev.filter((_, i) => i !== idx))}
+                          disabled={items.length === 1 || isSaving}
+                          className="text-muted-foreground hover:text-destructive disabled:opacity-30 transition-colors"
+                        >×</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </FormField>
-        )}
-        <FormField label="Description">
-          <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} disabled={isSaving} />
-        </FormField>
-        <FormField label="Due Date">
-          <Input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} disabled={isSaving} />
-        </FormField>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button type="submit" size="sm" disabled={isSaving}>
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-            {initialData ? "Update Invoice" : "Create Invoice"}
-          </Button>
-        </div>
-      </form>
-    </FormModal>
+            <Button type="button" variant="outline" size="sm" onClick={() => setItems(prev => [...prev, { description: '', quantity: 1, unit_price: 0 }])} disabled={isSaving}>
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add Item
+            </Button>
+          </div>
+
+          {/* Taxes */}
+          {taxes.length > 0 && (
+            <FormField label="Apply Taxes">
+              <div className="space-y-1.5">
+                {taxes.map(t => (
+                  <label key={t.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input type="checkbox" checked={form.selectedTaxIds.includes(t.id)} onChange={() => toggleTax(t.id)} disabled={isSaving} className="rounded" />
+                    {t.name} ({t.percentage}%)
+                    {form.selectedTaxIds.includes(t.id) && subtotal > 0 && (
+                      <span className="text-xs text-muted-foreground ml-auto">+{(subtotal * t.percentage / 100).toFixed(2)}</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </FormField>
+          )}
+
+          {/* Totals summary */}
+          <div className="flex justify-end">
+            <div className="w-52 space-y-1 text-sm">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Subtotal</span><span className="font-mono">{subtotal.toFixed(2)}</span>
+              </div>
+              {taxLines.map(t => (
+                <div key={t.id} className="flex justify-between text-muted-foreground">
+                  <span>{t.name} ({t.percentage}%)</span><span className="font-mono">+{t.amount.toFixed(2)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between font-bold pt-1 border-t">
+                <span>Total</span><span className="font-mono">{total.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={isSaving}>
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              {initialData ? 'Update Invoice' : 'Create Invoice'}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
