@@ -12,26 +12,30 @@ async function getInvoiceQueue() {
   return invoiceQueue;
 }
 
+/** Round to 2 decimal places — eliminates floating point drift */
+const round2 = (n) => Math.round(n * 100) / 100;
+
 const ItemSchema = z.object({
-  description: z.string().min(1),
-  quantity:    z.number().positive().default(1),
-  unit_price:  z.number().min(0),
+  description: z.string().min(1, 'Item description is required'),
+  quantity:    z.number().positive('Quantity must be greater than 0'),
+  unit_price:  z.number().min(0, 'Unit price cannot be negative'),
+});
+
+const TaxRefSchema = z.object({
+  id:         z.string().uuid(),
+  name:       z.string().min(1),
+  percentage: z.number().min(0).max(100),
+  // amount is intentionally NOT accepted from frontend — recomputed server-side
 });
 
 const CreateInvoiceSchema = z.object({
   client_id:    z.string().uuid(),
   project_id:   z.string().uuid().optional().nullable(),
-  amount:       z.number().min(0).optional(), // computed from items if not provided
-  due_date:     z.string(),
+  due_date:     z.string().min(1, 'Due date is required'),
   description:  z.string().optional().nullable(),
   status:       z.enum(['pending','paid','overdue','on_hold','cancelled']).default('pending'),
-  tax_snapshot: z.array(z.object({
-    id:         z.string(),
-    name:       z.string(),
-    percentage: z.number(),
-    amount:     z.number(),
-  })).optional().default([]),
-  items: z.array(ItemSchema).optional().default([]),
+  tax_snapshot: z.array(TaxRefSchema).optional().default([]),
+  items:        z.array(ItemSchema).min(1, 'At least one item is required'),
 });
 
 export async function createInvoice(req, res) {
@@ -56,14 +60,29 @@ export async function createInvoice(req, res) {
       return created(res, { jobId: job.id }, 'Invoice creation queued');
     }
 
-    // Compute subtotal from items; fall back to provided amount
-    const itemsSubtotal = data.items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
-    const taxTotal = (data.tax_snapshot ?? []).reduce((s, t) => s + t.amount, 0);
-    const finalAmount = data.amount ?? (itemsSubtotal + taxTotal);
+    // ── Server-side financial computation (never trust frontend totals) ──
+    // 1. Compute each item's amount independently, rounded to 2dp
+    const computedItems = data.items.map(item => ({
+      description: item.description,
+      quantity:    item.quantity,
+      unit_price:  round2(item.unit_price),
+      amount:      round2(item.quantity * item.unit_price),
+    }));
 
-    if (finalAmount <= 0 && data.items.length === 0) {
-      return badRequest(res, 'Provide at least one item or an amount');
-    }
+    // 2. Subtotal = sum of item amounts (already rounded individually)
+    const subtotal = round2(computedItems.reduce((s, i) => s + i.amount, 0));
+
+    // 3. Recompute each tax amount from subtotal × percentage (ignore frontend amount)
+    const computedTaxes = data.tax_snapshot.map(t => ({
+      id:         t.id,
+      name:       t.name,
+      percentage: t.percentage,
+      amount:     round2(subtotal * t.percentage / 100),
+    }));
+
+    // 4. Total = subtotal + sum of tax amounts
+    const taxTotal    = round2(computedTaxes.reduce((s, t) => s + t.amount, 0));
+    const finalAmount = round2(subtotal + taxTotal);
 
     // Direct insert when Redis is disabled
     const { data: invoice, error } = await supabase
@@ -75,7 +94,7 @@ export async function createInvoice(req, res) {
         due_date:     data.due_date,
         status:       data.status,
         description:  data.description || null,
-        tax_snapshot: data.tax_snapshot ?? [],
+        tax_snapshot: computedTaxes,
         org_id:       orgId,
         created_by:   userId,
         currency,
@@ -84,20 +103,12 @@ export async function createInvoice(req, res) {
 
     if (error) throw error;
 
-    // Insert line items
-    if (data.items.length) {
-      await supabase.from('invoice_items').insert(
-        data.items.map(item => ({
-          invoice_id:  invoice.id,
-          description: item.description,
-          quantity:    item.quantity,
-          unit_price:  item.unit_price,
-          amount:      item.quantity * item.unit_price,
-        }))
-      );
-    }
+    // Insert line items with server-computed amounts
+    await supabase.from('invoice_items').insert(
+      computedItems.map(item => ({ ...item, invoice_id: invoice.id }))
+    );
 
-    logAudit({ orgId, actorId: userId, action: 'invoice.created', targetType: 'invoice', targetId: invoice.id, metadata: { amount: data.amount } });
+    logAudit({ orgId, actorId: userId, action: 'invoice.created', targetType: 'invoice', targetId: invoice.id, metadata: { amount: finalAmount, subtotal, items: computedItems.length } });
 
     return created(res, invoice, 'Invoice created');
   } catch (err) {

@@ -4,10 +4,20 @@ import { ok, created, badRequest, forbidden, notFound, serverError } from '../ut
 import { logger } from '../utils/logger.js';
 import { logAudit } from '../utils/auditLogger.js';
 
+/** Round to 2 decimal places — eliminates floating point drift */
+const round2 = (n) => Math.round(n * 100) / 100;
+
 const ItemSchema = z.object({
-  description: z.string().min(1),
-  quantity:    z.number().positive().default(1),
-  unit_price:  z.number().min(0),
+  description: z.string().min(1, 'Item description is required'),
+  quantity:    z.number().positive('Quantity must be greater than 0'),
+  unit_price:  z.number().min(0, 'Unit price cannot be negative'),
+});
+
+const TaxRefSchema = z.object({
+  id:         z.string().uuid(),
+  name:       z.string().min(1),
+  percentage: z.number().min(0).max(100),
+  // amount intentionally excluded — recomputed server-side
 });
 
 const CreateQuotationSchema = z.object({
@@ -17,13 +27,8 @@ const CreateQuotationSchema = z.object({
   title:        z.string().min(1).max(200).default('Quotation'),
   due_date:     z.string().optional().nullable(),
   notes:        z.string().max(2000).optional().nullable(),
-  items:        z.array(ItemSchema).min(1),
-  tax_snapshot: z.array(z.object({
-    id:         z.string(),
-    name:       z.string(),
-    percentage: z.number(),
-    amount:     z.number(),
-  })).optional().default([]),
+  items:        z.array(ItemSchema).min(1, 'At least one item is required'),
+  tax_snapshot: z.array(TaxRefSchema).optional().default([]),
 });
 
 // ── Get all quotations ────────────────────────────────────────
@@ -84,7 +89,23 @@ export async function createQuotation(req, res) {
     }
 
     const currency = org?.currency || 'INR';
-    const total = data.items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
+
+    // ── Server-side financial computation ──
+    const computedItems = data.items.map(i => ({
+      description: i.description,
+      quantity:    i.quantity,
+      unit_price:  round2(i.unit_price),
+      amount:      round2(i.quantity * i.unit_price),
+    }));
+    const subtotal = round2(computedItems.reduce((s, i) => s + i.amount, 0));
+    const computedTaxes = data.tax_snapshot.map(t => ({
+      id:         t.id,
+      name:       t.name,
+      percentage: t.percentage,
+      amount:     round2(subtotal * t.percentage / 100),
+    }));
+    const taxTotal = round2(computedTaxes.reduce((s, t) => s + t.amount, 0));
+    const total    = round2(subtotal + taxTotal);
 
     const { data: quotation, error } = await supabase
       .from('quotations')
@@ -99,14 +120,14 @@ export async function createQuotation(req, res) {
         amount:       total,
         currency,
         created_by:   userId,
-        tax_snapshot: data.tax_snapshot ?? [],
+        tax_snapshot: computedTaxes,
       })
       .select().single();
 
     if (error) throw error;
 
     await supabase.from('quotation_items').insert(
-      data.items.map(i => ({ quotation_id: quotation.id, description: i.description, quantity: i.quantity, unit_price: i.unit_price }))
+      computedItems.map(i => ({ ...i, quotation_id: quotation.id }))
     );
 
     logAudit({ orgId, actorId: userId, action: 'quotation.created', targetType: 'quotation', targetId: quotation.id });
