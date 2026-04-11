@@ -547,39 +547,50 @@ export function TaskFormModal({ onSuccess, initialData, trigger }: { onSuccess?:
 export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSuccess?: () => void, initialData?: any, trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const { data: clientsData, isLoading: clientsLoading } = useClients();
+  const { data: projectsData, isLoading: projectsLoading } = useProjects();
   const { orgId } = useAuth();
   const [form, setForm] = useState({
-    clientId: initialData?.client_id || initialData?.clientId || '',
-    amount: initialData?.amount?.toString() || '',
+    clientId:   initialData?.client_id  || initialData?.clientId  || '',
+    projectId:  initialData?.project_id || initialData?.projectId || '',
+    amount:     initialData?.amount?.toString() || '',
     description: initialData?.description || (initialData?.items?.[0]?.description || ''),
-    dueDate: initialData?.due_date || initialData?.dueDate || '',
-    status: (initialData?.status || 'pending') as InvoiceStatus
+    dueDate:    initialData?.due_date || initialData?.dueDate || '',
+    status:     (initialData?.status || 'pending') as InvoiceStatus,
   });
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
+
+  const handleProjectChange = (projectId: string) => {
+    const selectedProject = projectsData?.find((p: any) => p.id === projectId);
+    setForm(f => ({
+      ...f,
+      projectId,
+      // Auto-fill client from project
+      clientId: selectedProject?.client_id || f.clientId,
+    }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.clientId || !form.amount) return;
     setIsSaving(true);
-    
     try {
       const dbData = {
-        client_id: form.clientId,
-        org_id: orgId,
-        amount: Number(form.amount),
-        due_date: form.dueDate,
-        status: form.status
+        client_id:   form.clientId,
+        project_id:  form.projectId || null,
+        org_id:      orgId,
+        amount:      Number(form.amount),
+        due_date:    form.dueDate,
+        status:      form.status,
+        description: form.description || null,
       };
-
       if (initialData) {
         await api.patch(`/invoices/${initialData.id}`, dbData);
         toast({ title: 'Invoice Updated', description: 'Changes saved successfully.' });
       } else {
-        await api.post('/invoices', { ...dbData, description: form.description });
+        await api.post('/invoices', dbData);
         toast({ title: 'Invoice Created', description: 'New invoice generated.' });
       }
-
       setOpen(false);
       onSuccess?.();
     } catch (err: any) {
@@ -597,6 +608,18 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
       title={initialData ? "Edit Invoice" : "Create Invoice"}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Project — optional, auto-fills client */}
+        <FormField label="Project (optional)">
+          <Select value={form.projectId || 'none'} onValueChange={v => handleProjectChange(v === 'none' ? '' : v)} disabled={projectsLoading || isSaving}>
+            <SelectTrigger><SelectValue placeholder="Select project (optional)" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No project</SelectItem>
+              {(projectsData as any[] ?? []).map((p: any) => (
+                <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FormField>
         <FormField label="Client">
           <Select value={form.clientId} onValueChange={v => setForm(f => ({ ...f, clientId: v }))} disabled={clientsLoading || isSaving}>
             <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
@@ -604,29 +627,33 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
           </Select>
         </FormField>
         <div className="grid grid-cols-2 gap-4">
-           <FormField label="Status">
-              <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as InvoiceStatus }))} disabled={isSaving}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                   <SelectItem value="pending">Pending</SelectItem>
-                   <SelectItem value="paid">Paid</SelectItem>
-                   <SelectItem value="overdue">Overdue</SelectItem>
-                   <SelectItem value="on_hold">On Hold</SelectItem>
-                   <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-           </FormField>
-           <FormField label="Amount ($)">
-              <Input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} disabled={isSaving} />
-           </FormField>
+          <FormField label="Status">
+            <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as InvoiceStatus }))} disabled={isSaving}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
+                <SelectItem value="overdue">Overdue</SelectItem>
+                <SelectItem value="on_hold">On Hold</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </FormField>
+          <FormField label="Amount">
+            <Input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} disabled={isSaving} />
+          </FormField>
         </div>
-        <FormField label="Description"><Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} disabled={isSaving} /></FormField>
-        <FormField label="Due Date"><Input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} disabled={isSaving} /></FormField>
+        <FormField label="Description">
+          <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} disabled={isSaving} />
+        </FormField>
+        <FormField label="Due Date">
+          <Input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} disabled={isSaving} />
+        </FormField>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
           <Button type="submit" size="sm" disabled={isSaving}>
-             {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-             {initialData ? "Update Invoice" : "Create Invoice"}
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+            {initialData ? "Update Invoice" : "Create Invoice"}
           </Button>
         </div>
       </form>
@@ -703,6 +730,7 @@ export function InvoiceDetailsModal({ invoice, client: clientProp, trigger }: { 
                 company: client.company,
                 email:   client.email,
               } : undefined,
+              project: invoice.project ?? null,
             }}
           />
         )}

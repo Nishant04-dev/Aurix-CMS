@@ -14,6 +14,7 @@ async function getInvoiceQueue() {
 
 const CreateInvoiceSchema = z.object({
   client_id:   z.string().uuid(),
+  project_id:  z.string().uuid().optional().nullable(),
   amount:      z.number().positive(),
   due_date:    z.string(),
   description: z.string().optional().nullable(),
@@ -53,6 +54,7 @@ export async function createInvoice(req, res) {
       .from('invoices')
       .insert({
         client_id:   data.client_id,
+        project_id:  data.project_id || null,
         amount:      data.amount,
         due_date:    data.due_date,
         status:      data.status,
@@ -99,7 +101,7 @@ export async function getInvoices(req, res) {
 
     let query = supabase
       .from('invoices')
-      .select('*, invoice_items(*), client:clients(id, name, company, email)')
+      .select('*, invoice_items(*), client:clients(id, name, company, email), project:projects(id, title)')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false });
 

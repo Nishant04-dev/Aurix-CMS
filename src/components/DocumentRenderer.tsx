@@ -21,6 +21,7 @@ export interface DocumentData {
   items?: { description: string; quantity?: number; unit_price?: number; amount?: number }[];
   org?: { name?: string; logo_url?: string; address?: string; phone?: string; email?: string };
   client?: { name?: string; company?: string; email?: string; phone?: string };
+  project?: { id?: string; title?: string } | null;
   created_at?: string;
 }
 
@@ -187,6 +188,11 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
               )}
               {clientEmail && (
                 <div className="text-xs text-gray-500">{clientEmail}</div>
+              )}
+              {data.project?.title && (
+                <div className="text-xs text-gray-400 mt-1">
+                  Project: {data.project.title}
+                </div>
               )}
             </div>
             <div className="text-right text-xs text-gray-500">
