@@ -8,7 +8,7 @@ import { getOrganization, updateOrganization, getUserOrganizations, switchOrgani
 import { createProject, getProjects, updateProject, deleteProject }  from '../controllers/projectController.js';
 import { getTasks, createTask, updateTask, deleteTask }              from '../controllers/taskController.js';
 import { getMessages, sendMessage, getLastMessages }               from '../controllers/messageController.js';
-import { registerFile, deleteFile }                                  from '../controllers/fileController.js';
+import { registerFile, deleteFile, getFiles }                        from '../controllers/fileController.js';
 import { uploadFile, getPublicUrl, createSignedUrl, deleteFile as deleteStorageFile } from '../controllers/storageController.js';
 import { sendInvitation, respondToInvitation, getMyInvitations, lookupUserByDisplayId } from '../controllers/invitationController.js';
 import { createInvoice, getInvoices, updateInvoice, cancelInvoice, deleteInvoice, sendInvoiceByEmail } from '../controllers/invoiceController.js';
@@ -78,6 +78,7 @@ router.patch ('/clients/:id',     requireOrg, writeLimiter, requirePermission('m
 router.delete('/clients/:id',     requireOrg, writeLimiter, requirePermission('manage_clients'), deleteClient);
 
 // ── Files ─────────────────────────────────────────────────────
+router.get   ('/files',           requireOrg, getFiles);
 router.post  ('/files/upload',    requireOrg, writeLimiter, requirePermission('upload_files'),   registerFile);
 router.delete('/files/:file_id',  requireOrg, writeLimiter, deleteFile);
 

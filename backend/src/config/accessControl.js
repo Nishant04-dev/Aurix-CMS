@@ -97,8 +97,8 @@ const ACCESS = {
     convert: ['super_admin', 'admin', 'member'],
   },
   files: {
-    view:   ['super_admin', 'admin', 'member'],
-    upload: ['super_admin', 'admin', 'member'],
+    view:   ['super_admin', 'admin', 'member', 'client'],  // clients can view & download
+    upload: ['super_admin', 'admin', 'member'],             // clients cannot upload
     delete: ['super_admin', 'admin'],
   },
   chat: {
@@ -111,13 +111,13 @@ const ACCESS = {
     view: ['super_admin', 'admin'],
   },
   projects: {
-    view:   ['super_admin', 'admin', 'member'],
+    view:   ['super_admin', 'admin', 'member', 'client'],  // clients see their own (filtered in controller)
     create: ['super_admin', 'admin', 'member'],
     edit:   ['super_admin', 'admin', 'member'],
     delete: ['super_admin', 'admin'],
   },
   tasks: {
-    view:   ['super_admin', 'admin', 'member'],
+    view:   ['super_admin', 'admin', 'member', 'client'],  // clients see tasks on their projects
     create: ['super_admin', 'admin', 'member'],
     edit:   ['super_admin', 'admin', 'member'],
     delete: ['super_admin', 'admin'],

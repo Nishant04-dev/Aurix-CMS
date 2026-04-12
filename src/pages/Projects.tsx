@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjects, useClients, useApprovalRequests, useCreateApprovalRequest, useUpdateApprovalRequest } from '@/hooks/use-database';
 import { usePermissions } from '@/hooks/use-permissions';
+import { normalizeRole } from '@/lib/accessControl';
 import { Input } from '@/components/ui/input';
 import { Search, Loader2, Calendar, LayoutGrid, List as ListIcon, MoreHorizontal, ArrowRight, Edit3, Pause, Play, CheckCircle2, XCircle, Clock, FileCheck, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -80,9 +81,9 @@ export default function Projects() {
   const [confirmAction, setConfirmAction] = useState<{ id: string, status: ProjectStatus } | null>(null);
   const [approvalRequest, setApprovalRequest] = useState<{ projectId: string, field: string, oldValue: string, newValue: string } | null>(null);
 
-  const isClient = user?.role === 'client';
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
-  const canManage = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'super_admin';
+  const isClient = normalizeRole(user?.role) === 'client';
+  const isAdmin = normalizeRole(user?.role) === 'super_admin' || normalizeRole(user?.role) === 'admin';
+  const canManage = isAdmin || normalizeRole(user?.role) === 'member';
   const isLocked = (projectStatus: string) => projectStatus === 'completed' || projectStatus === 'approval_pending';
   const { canEditProject, canDeleteProject, canCancelProject, canAssignMembers, can } = usePermissions();
 

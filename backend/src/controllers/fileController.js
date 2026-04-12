@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { fileQueue } from '../queue/queues.js';
 import { supabase } from '../config/supabase.js';
 import { getLimits } from '../config/planLimits.js';
-import { can } from '../config/accessControl.js';
+import { can, normalizeRole } from '../config/accessControl.js';
 import { ok, created, badRequest, forbidden, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
 
@@ -13,6 +13,62 @@ const RegisterFileSchema = z.object({
   size:         z.number().min(0),
   type:         z.string().optional(),
 });
+
+/**
+ * GET /files — list files for the org.
+ * Clients see only files for their projects.
+ * Members/admins see all org files.
+ */
+export async function getFiles(req, res) {
+  try {
+    const { orgId, role, id: userId } = req.user;
+    const { project_id } = req.query;
+
+    if (!can(role, 'files', 'view')) {
+      return forbidden(res, 'Access denied');
+    }
+
+    let query = supabase
+      .from('files')
+      .select('id, name, storage_path, project_id, size, type, uploaded_by, created_at, org_id')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false });
+
+    // Clients only see files for their projects
+    if (normalizeRole(role) === 'client') {
+      const { data: client } = await supabase
+        .from('clients').select('id').eq('user_id', userId).eq('org_id', orgId).single();
+      if (!client) return ok(res, []);
+      const { data: projects } = await supabase
+        .from('projects').select('id').eq('client_id', client.id).eq('org_id', orgId);
+      const ids = (projects || []).map(p => p.id);
+      if (ids.length === 0) return ok(res, []);
+      query = query.in('project_id', ids);
+    } else if (project_id) {
+      query = query.eq('project_id', project_id);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    // Enrich with uploader name
+    const uploaderIds = [...new Set((data || []).map(f => f.uploaded_by).filter(Boolean))];
+    let profileMap: Record<string, string> = {};
+    if (uploaderIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles').select('id, name').in('id', uploaderIds);
+      profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p.name]));
+    }
+
+    return ok(res, (data || []).map(f => ({
+      ...f,
+      uploaderName: profileMap[f.uploaded_by] || 'Unknown',
+    })));
+  } catch (err) {
+    logger.error('getFiles error', { err: err.message });
+    return serverError(res, err.message);
+  }
+}
 
 export async function registerFile(req, res) {
   try {

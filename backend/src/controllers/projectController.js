@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { supabase } from '../config/supabase.js';
+import { can, normalizeRole } from '../config/accessControl.js';
 import { ok, created, badRequest, forbidden, notFound, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
 import { logAudit } from '../utils/auditLogger.js';
@@ -105,8 +106,9 @@ export async function getProjects(req, res) {
       .eq('org_id', orgId)
       .order('created_at', { ascending: false });
 
-    // Staff only see assigned projects
-    if (role === 'developer' || role === 'support') {
+    // Members (developer/support/member) only see assigned projects
+    const normalized = normalizeRole(role);
+    if (normalized === 'member') {
       const { data: memberProjects } = await supabase
         .from('project_members')
         .select('project_id')
@@ -117,7 +119,7 @@ export async function getProjects(req, res) {
     }
 
     // Client sees only their projects
-    if (role === 'client') {
+    if (normalized === 'client') {
       const { data: client } = await supabase
         .from('clients')
         .select('id')
@@ -181,7 +183,7 @@ export async function deleteProject(req, res) {
     const { orgId, role, id: userId } = req.user;
     const { id } = req.params;
 
-    if (!['admin', 'super_admin', 'manager'].includes(role)) {
+    if (!can(role, 'projects', 'delete')) {
       return forbidden(res, 'Insufficient permissions to delete projects');
     }
 

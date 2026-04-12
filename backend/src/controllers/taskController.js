@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { supabase } from '../config/supabase.js';
+import { can, normalizeRole } from '../config/accessControl.js';
 import { ok, created, badRequest, forbidden, notFound, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
 
@@ -26,7 +27,9 @@ export async function getTasks(req, res) {
       .eq('org_id', orgId)
       .order('created_at', { ascending: false });
 
-    if (role === 'client') {
+    const normalized = normalizeRole(role);
+
+    if (normalized === 'client') {
       // Clients see tasks for their projects only
       const { data: client } = await supabase
         .from('clients').select('id').eq('user_id', userId).eq('org_id', orgId).single();
@@ -36,7 +39,8 @@ export async function getTasks(req, res) {
       const ids = (projects || []).map(p => p.id);
       if (ids.length === 0) return ok(res, []);
       query = query.in('project_id', ids);
-    } else if (role === 'developer' || role === 'support') {
+    } else if (normalized === 'member') {
+      // Members see only tasks assigned to them
       query = query.eq('assigned_to_id', userId);
     } else if (project_id) {
       query = query.eq('project_id', project_id);
@@ -54,7 +58,7 @@ export async function getTasks(req, res) {
 export async function createTask(req, res) {
   try {
     const { orgId, role } = req.user;
-    if (!['admin', 'super_admin', 'manager'].includes(role)) {
+    if (!can(role, 'tasks', 'create')) {
       return forbidden(res, 'Insufficient permissions to create tasks');
     }
     const data = CreateTaskSchema.parse(req.body);
@@ -88,8 +92,13 @@ export async function updateTask(req, res) {
       .from('tasks').select('id, assigned_to_id').eq('id', id).eq('org_id', orgId).single();
     if (!existing) return notFound(res, 'Task not found');
 
-    // Staff can only update tasks assigned to them
-    if ((role === 'developer' || role === 'support') && existing.assigned_to_id !== userId) {
+    // Clients cannot update tasks
+    if (normalizeRole(role) === 'client') {
+      return forbidden(res, 'Clients cannot update tasks');
+    }
+
+    // Members can only update tasks assigned to them
+    if (normalizeRole(role) === 'member' && existing.assigned_to_id !== userId) {
       return forbidden(res, 'You can only update tasks assigned to you');
     }
 
@@ -116,7 +125,7 @@ export async function deleteTask(req, res) {
     const { orgId, role } = req.user;
     const { id } = req.params;
 
-    if (!['admin', 'super_admin', 'manager'].includes(role)) {
+    if (!can(role, 'tasks', 'delete')) {
       return forbidden(res, 'Insufficient permissions to delete tasks');
     }
 

@@ -44,17 +44,19 @@ export default function Files() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
-  const { canUploadFile, limits } = usePlanLimits();
+  const { canUploadFile } = usePlanLimits();
   const { can: planCan, planName } = usePlan();
   const hasFilesAccess = planCan('files');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const canUpload = can('upload_file') && canUploadFile;
-  const canDelete = can('delete_file');
-  const canView   = can('view_file');
-  const isClientUser = user?.role === 'client';
 
-  // ── Full lock screen for plans that don't include files ──────
-  if (!hasFilesAccess) {
+  const isClient = user?.role === 'client';
+  // Clients can view & download only — never upload or delete
+  const canUpload = !isClient && can('upload_file') && canUploadFile;
+  const canDelete = !isClient && can('delete_file');
+
+  // Plan lock screen — only for non-clients on free plan
+  // Clients always see files (read-only), regardless of plan
+  if (!hasFilesAccess && !isClient) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
         <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center mb-6">
@@ -208,48 +210,20 @@ if (isLoading) {
     );
   }
 
-  // Show upgrade wall if plan doesn't include file uploads
-  if (!hasFilesAccess) {
-    const isOwnerOrAdmin = user?.role === 'admin' || user?.role === 'super_admin';
-    return (
-      <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-6 max-w-md mx-auto">
-        <div className="h-20 w-20 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center">
-          <Lock className="h-9 w-9 text-amber-500" />
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">Unlock File Sharing</h2>
-          <p className="text-muted-foreground mt-2 text-sm">
-            File uploads and sharing are available on Pro and Enterprise plans.
-            {isOwnerOrAdmin
-              ? ' Upgrade your organization to unlock this feature.'
-              : ' Please contact your admin to upgrade the plan.'}
-          </p>
-        </div>
-        {isOwnerOrAdmin ? (
-          <>
-            <Button className="gap-2" onClick={() => navigate('/settings/billing')}>
-              <Zap className="h-4 w-4" /> Upgrade Plan
-            </Button>
-            <p className="text-xs text-muted-foreground">Pro plan starts at ₹199/mo · Cancel anytime</p>
-          </>
-        ) : (
-          <div className="rounded-xl border border-border/50 bg-muted/30 px-6 py-4 text-sm text-muted-foreground">
-            Contact your organization admin to upgrade the plan and unlock file sharing.
-          </div>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">File Management</h1>
-          <p className="text-muted-foreground mt-1 text-sm font-medium">Manage and share project files securely.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            {isClient ? 'Project Files' : 'File Management'}
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm font-medium">
+            {isClient ? 'View and download files shared with you.' : 'Manage and share project files securely.'}
+          </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
-          {canUpload && (
+        {/* Upload controls — hidden from clients */}
+        {canUpload && (
+          <div className="flex flex-col sm:flex-row gap-3">
             <Select value={uploadProject} onValueChange={setUploadProject}>
               <SelectTrigger className="w-full sm:w-[200px]">
                 <SelectValue placeholder="Select project to upload" />
@@ -260,17 +234,7 @@ if (isLoading) {
                 ))}
               </SelectContent>
             </Select>
-          )}
-          <input type="file" className="hidden" ref={fileInputRef} onChange={handleUpload} />
-          {can('upload_file') && !canUploadFile ? (
-            <Button
-              size="sm"
-              onClick={() => setShowUpgradeModal(true)}
-              className="opacity-80"
-            >
-              <Upload className="h-4 w-4 mr-1" /> Upload
-            </Button>
-          ) : canUpload && (
+            <input type="file" className="hidden" ref={fileInputRef} onChange={handleUpload} />
             <Button
               size="sm"
               onClick={() => {
@@ -286,16 +250,9 @@ if (isLoading) {
               {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
               Upload
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-
-      <UpgradeModal
-        open={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
-        feature="file uploads"
-        message="File uploads are not available on the free plan. Upgrade to Pro to upload files."
-      />
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 py-2 border-b border-border/30 pb-4">
         <div className="relative w-full max-w-sm group">
@@ -360,6 +317,7 @@ if (isLoading) {
                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary" onClick={() => handleDownload(f.fileUrl, f.name)} title="Download">
                              <Download className="h-4 w-4" />
                          </Button>
+                         {/* Rename and delete — hidden from clients */}
                          {canDelete && (
                            <>
                              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary" onClick={() => { setRenameFile({ id: f.id, currentName: f.name }); setNewFileName(f.name); }} title="Rename">

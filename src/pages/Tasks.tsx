@@ -6,6 +6,7 @@ import type { TaskStatus, Task } from '@/types';
 import { TaskFormModal } from '@/components/FormModals';
 import { useTasks, useProjects, useTeamMembers } from '@/hooks/use-database';
 import { usePermissions } from '@/hooks/use-permissions';
+import { normalizeRole } from '@/lib/accessControl';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
@@ -44,8 +45,8 @@ export default function Tasks() {
   const { data: teamMembers } = useTeamMembers();
   const { toast } = useToast();
   
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
-  const isClientUser = user?.role === 'client';
+  const isAdmin = normalizeRole(user?.role) === 'super_admin' || normalizeRole(user?.role) === 'admin';
+  const isClientUser = normalizeRole(user?.role) === 'client';
   const { canDeleteTask, canManageTasks } = usePermissions();
 
   useEffect(() => {

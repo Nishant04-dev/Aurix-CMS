@@ -48,11 +48,11 @@ const ACCESS = {
   roles:      { view: ['super_admin', 'admin'] },
   invoices:   { view: ['super_admin', 'admin', 'member', 'client'] },
   quotations: { view: ['super_admin', 'admin', 'member', 'client'] },
-  files:      { view: ['super_admin', 'admin', 'member'] },
+  files:      { view: ['super_admin', 'admin', 'member', 'client'] },  // clients can view & download
   chat:       { view: ['super_admin', 'admin', 'member', 'client'] },
   audit_logs: { view: ['super_admin', 'admin'] },
-  projects:   { view: ['super_admin', 'admin', 'member'] },
-  tasks:      { view: ['super_admin', 'admin', 'member'] },
+  projects:   { view: ['super_admin', 'admin', 'member', 'client'] },  // clients see their own
+  tasks:      { view: ['super_admin', 'admin', 'member', 'client'] },  // clients see their own
   settings:   { view: ['super_admin', 'admin'] },
 } as const;
 
