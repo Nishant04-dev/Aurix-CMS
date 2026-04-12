@@ -143,6 +143,7 @@ export async function respondToInvitation(req, res) {
         logger.error('respondToInvitation: failed to update profile org_id', { err: profileErr.message, userId, org_id: inv.org_id });
         throw profileErr;
       }
+      logger.info('Profile org_id updated', { userId, org_id: inv.org_id });
 
       const { error: memberErr } = await supabase
         .from('memberships')
@@ -151,13 +152,13 @@ export async function respondToInvitation(req, res) {
           org_id:  inv.org_id,
           role:    inv.role_name || 'client',
           status:  'active',
+          updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id,org_id' });
       if (memberErr) {
         logger.error('respondToInvitation: failed to upsert membership', { err: memberErr.message, userId, org_id: inv.org_id });
         throw memberErr;
       }
-
-      logger.info('Invitation accepted — profile + membership updated', { userId, org_id: inv.org_id, role: inv.role_name });
+      logger.info('Membership upserted', { userId, org_id: inv.org_id, role: inv.role_name });
     }
 
     const auditAction = action === 'accept' ? 'invite.accepted' : 'invite.rejected';

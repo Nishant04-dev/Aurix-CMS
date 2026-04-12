@@ -30,17 +30,20 @@ async function removeFromChannels(userId, orgId) {
  * Keeps the membership row for audit history.
  */
 async function deactivateMembership(userId, orgId, status = 'left') {
-  await supabase
+  const { error: memErr } = await supabase
     .from('memberships')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('user_id', userId)
     .eq('org_id', orgId);
+  if (memErr) logger.warn('deactivateMembership: membership update failed', { err: memErr.message, userId, orgId });
 
-  await supabase
+  // Clear profile org_id only if it still points to this org
+  const { error: profErr } = await supabase
     .from('profiles')
     .update({ org_id: null })
     .eq('id', userId)
-    .eq('org_id', orgId); // only clear if still in this org
+    .eq('org_id', orgId);
+  if (profErr) logger.warn('deactivateMembership: profile update failed', { err: profErr.message, userId, orgId });
 }
 
 // ── Leave Organization ────────────────────────────────────────
@@ -101,7 +104,7 @@ export async function removeMember(req, res) {
 
     // Protect platform owner
     const { data: targetProfile } = await supabase
-      .from('profiles').select('is_platform_owner').eq('id', target_user_id).single();
+      .from('profiles').select('is_platform_owner').eq('id', target_user_id).maybeSingle();
     if (targetProfile?.is_platform_owner) {
       return forbidden(res, 'Cannot remove the platform owner');
     }
@@ -133,7 +136,7 @@ export async function banMember(req, res) {
     if (target_user_id === requesterId) return badRequest(res, 'Cannot ban yourself');
 
     const { data: targetProfile } = await supabase
-      .from('profiles').select('is_platform_owner').eq('id', target_user_id).single();
+      .from('profiles').select('is_platform_owner').eq('id', target_user_id).maybeSingle();
     if (targetProfile?.is_platform_owner) {
       return forbidden(res, 'Cannot ban the platform owner');
     }
