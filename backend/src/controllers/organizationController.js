@@ -4,16 +4,20 @@ import { ok, badRequest, forbidden, notFound, serverError } from '../utils/respo
 import { logger } from '../utils/logger.js';
 
 const UpdateOrgSchema = z.object({
-  name:        z.string().min(1).max(200).optional(),
-  logo_url:    z.string().url().optional().nullable(),
-  website:     z.string().url().optional().nullable(),
-  gst_number:  z.string().max(50).optional().nullable(),
-  address:     z.string().max(500).optional().nullable(),
-  phone:       z.string().max(30).optional().nullable(),
-  currency:    z.enum(['USD','INR','EUR','GBP','AED','CAD','AUD','SGD','JPY']).optional(),
-  timezone:    z.string().max(100).optional(),
-  template_id: z.string().uuid().optional().nullable(),
-  branding:    z.record(z.any()).optional().nullable(),
+  name:          z.string().min(1).max(200).optional(),
+  logo_url:      z.string().url().optional().nullable(),
+  website:       z.string().url().optional().nullable(),
+  gst_number:    z.string().max(50).optional().nullable(),
+  address:       z.string().max(500).optional().nullable(),
+  phone:         z.string().max(30).optional().nullable(),
+  currency:      z.enum(['USD','INR','EUR','GBP','AED','CAD','AUD','SGD','JPY']).optional(),
+  timezone:      z.string().max(100).optional(),
+  template_id:   z.string().uuid().optional().nullable(),
+  branding:      z.record(z.any()).optional().nullable(),
+  terms:         z.string().max(5000).optional().nullable(),
+  payment_terms: z.string().max(2000).optional().nullable(),
+  bank_details:  z.string().max(2000).optional().nullable(),
+  upi_id:        z.string().max(100).optional().nullable(),
 });
 
 export async function getOrganization(req, res) {
@@ -23,7 +27,7 @@ export async function getOrganization(req, res) {
 
     const { data, error } = await supabase
       .from('organizations')
-      .select('id, name, logo_url, website, gst_number, address, phone, currency, timezone, plan, status, created_at, template_id, branding')
+      .select('id, name, logo_url, website, gst_number, address, phone, currency, timezone, plan, status, created_at, template_id, branding, terms, payment_terms, bank_details, upi_id')
       .eq('id', orgId)
       .single();
     if (error) throw error;
@@ -45,7 +49,7 @@ export async function updateOrganization(req, res) {
       .from('organizations')
       .update(data)
       .eq('id', orgId)
-      .select('id, name, logo_url, website, gst_number, address, phone, currency, timezone, plan, status, template_id, branding')
+      .select('id, name, logo_url, website, gst_number, address, phone, currency, timezone, plan, status, template_id, branding, terms, payment_terms, bank_details, upi_id')
       .single();
     if (error) throw error;
     return ok(res, updated, 'Organization updated');

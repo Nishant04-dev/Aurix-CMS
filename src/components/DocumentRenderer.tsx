@@ -8,6 +8,7 @@ import jsPDF from 'jspdf';
 import { Button } from '@/components/ui/button';
 import { Download, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatCurrency } from '@/lib/currency';
 
 export interface TaxLine {
   id: string;
@@ -47,11 +48,6 @@ const TEMPLATES: Record<string, TemplateConfig> = {
   premium:   { bg: '#fffbeb', headerBg: '#92400e', headerText: '#fef3c7', accent: '#d97706',  tableHeaderBg: '#fef3c7', tableHeaderText: '#92400e', borderColor: '#fde68a', font: 'sans-serif' },
   creative:  { bg: '#fdf4ff', headerBg: '#ec4899', headerText: '#ffffff', accent: '#ec4899',  tableHeaderBg: '#fce7f3', tableHeaderText: '#9d174d', borderColor: '#fbcfe8', font: 'sans-serif' },
 };
-
-function fmt(amount: number, currency: string) {
-  try { return new Intl.NumberFormat('en-IN', { style: 'currency', currency, minimumFractionDigits: 2 }).format(amount); }
-  catch { return `${currency} ${Number(amount).toFixed(2)}`; }
-}
 
 function safeDate(val?: string | null): string {
   if (!val) return '—';
@@ -236,9 +232,9 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
                   <tr key={i} style={{ borderBottom: `1px solid ${cfg.borderColor}` }}>
                     <td className="p-2">{item.description || 'No description'}</td>
                     <td className="p-2 text-right">{item.quantity ?? 1}</td>
-                    <td className="p-2 text-right">{fmt(item.unit_price ?? 0, data.currency)}</td>
+                    <td className="p-2 text-right">{formatCurrency(item.unit_price ?? 0, data.currency)}</td>
                     <td className="p-2 text-right font-semibold">
-                      {fmt(item.amount ?? (item.quantity ?? 1) * (item.unit_price ?? 0), data.currency)}
+                      {formatCurrency(item.amount ?? (item.quantity ?? 1) * (item.unit_price ?? 0), data.currency)}
                     </td>
                   </tr>
                 ))}
@@ -250,12 +246,12 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
               <div className="w-56 space-y-1">
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Subtotal</span>
-                  <span>{fmt(subtotal, data.currency)}</span>
+                  <span>{formatCurrency(subtotal, data.currency)}</span>
                 </div>
                 {taxes.map(t => (
                   <div key={t.id} className="flex justify-between text-xs">
                     <span className="text-gray-400">{t.name} ({t.percentage}%)</span>
-                    <span>{fmt(t.amount, data.currency)}</span>
+                    <span>{formatCurrency(t.amount, data.currency)}</span>
                   </div>
                 ))}
                 <div
@@ -263,7 +259,7 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
                   style={{ borderTop: `2px solid ${cfg.accent}` }}
                 >
                   <span>Total</span>
-                  <span style={{ color: cfg.accent }}>{fmt(data.amount, data.currency)}</span>
+                  <span style={{ color: cfg.accent }}>{formatCurrency(data.amount, data.currency)}</span>
                 </div>
               </div>
             </div>

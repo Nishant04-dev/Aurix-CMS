@@ -22,6 +22,10 @@ export interface Organization {
   status: string;
   template_id: string | null;
   branding: Record<string, any> | null;
+  terms: string | null;
+  payment_terms: string | null;
+  bank_details: string | null;
+  upi_id: string | null;
 }
 
 // Canonical query key — used everywhere so invalidation works globally

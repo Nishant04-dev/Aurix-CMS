@@ -28,11 +28,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { DocumentRenderer } from '@/components/DocumentRenderer';
 import { useOrganization } from '@/hooks/use-organization';
 import { useTaxes } from '@/hooks/use-taxes';
-
-function fmt(amount: number, currency = 'INR') {
-  try { return new Intl.NumberFormat('en-IN', { style: 'currency', currency, minimumFractionDigits: 2 }).format(amount); }
-  catch { return `${amount.toFixed(2)}`; }
-}
+import { useOrgCurrency } from '@/hooks/use-org-currency';
+import { formatCurrency } from '@/lib/currency';
 
 interface FormModalProps {
   trigger?: React.ReactNode;
@@ -134,7 +131,7 @@ function MultiSelect({
 // Client Form
 export function ClientFormModal() {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', company: '', email: '', phone: '', password: '' });
+  const [form, setForm] = useState({ name: '', company: '', email: '', phone: '', address: '', password: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { toast } = useToast();
   const createClient = useCreateClient();
@@ -157,7 +154,7 @@ export function ClientFormModal() {
     try {
       await createClient.mutateAsync(form);
       toast({ title: 'Success', description: 'Client account created successfully' });
-      setForm({ name: '', company: '', email: '', phone: '', password: '' });
+      setForm({ name: '', company: '', email: '', phone: '', address: '', password: '' });
       setOpen(false);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error', description: err.message || 'Failed to create client' });
@@ -183,6 +180,9 @@ export function ClientFormModal() {
         </FormField>
         <FormField label="Phone">
           <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555-0100" disabled={createClient.isPending} />
+        </FormField>
+        <FormField label="Address">
+          <Textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Street, City, Country" rows={2} disabled={createClient.isPending} />
         </FormField>
         <FormField label="Initial Password" error={errors.password}>
           <Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" disabled={createClient.isPending} />
@@ -556,6 +556,7 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
   const { data: projectsData, isLoading: projectsLoading } = useProjects();
   const { data: taxes = [] } = useTaxes();
   const { orgId } = useAuth();
+  const { currencyCode } = useOrgCurrency();
 
   type LineItem = { description: string; quantity: number; unit_price: number };
   const [items, setItems] = useState<LineItem[]>(
@@ -571,8 +572,18 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
     notes:          initialData?.notes || '',
     selectedTaxIds: [] as string[],
   });
+  const [selectedClient, setSelectedClient] = useState<any>(
+    initialData?.client || null
+  );
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
+
+  // Sync selectedClient when clientsData loads (handles edit mode + stale cache)
+  React.useEffect(() => {
+    if (!form.clientId || !clientsData?.length) return;
+    const match = (clientsData as any[]).find((c: any) => String(c.id) === String(form.clientId));
+    if (match) setSelectedClient(match);
+  }, [clientsData, form.clientId]);
 
   // Auto-calculate subtotal from items
   const subtotal = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
@@ -584,8 +595,19 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
   const updateItem = (idx: number, field: keyof LineItem, value: string | number) =>
     setItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
 
+  const handleClientChange = (clientId: string) => {
+    const client = (clientsData as any[] ?? []).find((c: any) => String(c.id) === String(clientId)) ?? null;
+    console.log('[InvoiceFormModal] client selected:', clientId, '→', client);
+    setSelectedClient(client);
+    setForm(f => ({ ...f, clientId }));
+  };
+
   const handleProjectChange = (projectId: string) => {
     const p = (projectsData as any[] ?? []).find((x: any) => x.id === projectId);
+    if (p?.client_id) {
+      const client = (clientsData as any[] ?? []).find((c: any) => String(c.id) === String(p.client_id)) ?? null;
+      setSelectedClient(client);
+    }
     setForm(f => ({ ...f, projectId, clientId: p?.client_id || f.clientId }));
   };
 
@@ -648,12 +670,23 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
               </Select>
             </FormField>
             <FormField label="Client">
-              <Select value={form.clientId} onValueChange={v => setForm(f => ({ ...f, clientId: v }))} disabled={clientsLoading || isSaving}>
+              <Select value={form.clientId} onValueChange={handleClientChange} disabled={clientsLoading || isSaving}>
                 <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-                <SelectContent>{clientsData?.map(c => <SelectItem key={c.id} value={c.id}>{c.name} — {c.company}</SelectItem>)}</SelectContent>
+                <SelectContent>{(clientsData as any[] ?? []).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}{c.company ? ` — ${c.company}` : ''}</SelectItem>)}</SelectContent>
               </Select>
             </FormField>
           </div>
+
+          {/* Client Details Panel */}
+          {selectedClient && (
+            <div className="rounded-lg border border-border/50 bg-muted/20 px-4 py-3 text-sm space-y-0.5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">Client Details</p>
+              <p className="font-semibold text-foreground">{selectedClient.name}{selectedClient.company ? ` · ${selectedClient.company}` : ''}</p>
+              {selectedClient.email   && <p className="text-muted-foreground">{selectedClient.email}</p>}
+              {selectedClient.phone   && <p className="text-muted-foreground">{selectedClient.phone}</p>}
+              {selectedClient.address && <p className="text-muted-foreground whitespace-pre-line">{selectedClient.address}</p>}
+            </div>
+          )}
 
           {/* Status + Due Date */}
           <div className="grid grid-cols-2 gap-3">
@@ -719,7 +752,7 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
                         />
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono text-xs font-semibold">
-                        {(item.quantity * item.unit_price).toFixed(2)}
+                        {formatCurrency(item.quantity * item.unit_price, currencyCode)}
                       </td>
                       <td className="px-1 py-1.5">
                         <button
@@ -748,7 +781,7 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
                     <input type="checkbox" checked={form.selectedTaxIds.includes(t.id)} onChange={() => toggleTax(t.id)} disabled={isSaving} className="rounded" />
                     {t.name} ({t.percentage}%)
                     {form.selectedTaxIds.includes(t.id) && subtotal > 0 && (
-                      <span className="text-xs text-muted-foreground ml-auto">+{(subtotal * t.percentage / 100).toFixed(2)}</span>
+                      <span className="text-xs text-muted-foreground ml-auto">+{formatCurrency(subtotal * t.percentage / 100, currencyCode)}</span>
                     )}
                   </label>
                 ))}
@@ -760,15 +793,15 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
           <div className="flex justify-end">
             <div className="w-52 space-y-1 text-sm">
               <div className="flex justify-between text-muted-foreground">
-                <span>Subtotal</span><span className="font-mono">{subtotal.toFixed(2)}</span>
+                <span>Subtotal</span><span className="font-mono">{formatCurrency(subtotal, currencyCode)}</span>
               </div>
               {taxLines.map(t => (
                 <div key={t.id} className="flex justify-between text-muted-foreground">
-                  <span>{t.name} ({t.percentage}%)</span><span className="font-mono">+{t.amount.toFixed(2)}</span>
+                  <span>{t.name} ({t.percentage}%)</span><span className="font-mono">+{formatCurrency(t.amount, currencyCode)}</span>
                 </div>
               ))}
               <div className="flex justify-between font-bold pt-1 border-t">
-                <span>Total</span><span className="font-mono">{total.toFixed(2)}</span>
+                <span>Total</span><span className="font-mono">{formatCurrency(total, currencyCode)}</span>
               </div>
             </div>
           </div>

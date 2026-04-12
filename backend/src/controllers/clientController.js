@@ -8,7 +8,8 @@ const ClientSchema = z.object({
   name:    z.string().min(1).max(200),
   company: z.string().min(1).max(200),
   email:   z.string().email(),
-  phone:   z.string().max(30).optional(),
+  phone:   z.string().max(30).optional().nullable(),
+  address: z.string().max(500).optional().nullable(),
 });
 
 export async function getClients(req, res) {

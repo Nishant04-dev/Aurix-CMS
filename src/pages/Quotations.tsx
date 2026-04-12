@@ -38,7 +38,7 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 interface Template { id: string; name: string; slug: string; plan_required: string; preview_color: string; locked: boolean; }
-interface Client   { id: string; name: string; company: string; }
+interface Client   { id: string; name: string; company: string; email?: string | null; phone?: string | null; address?: string | null; }
 interface QuotationItem { description: string; quantity: number; unit_price: number; }
 
 export default function Quotations() {
@@ -79,6 +79,7 @@ export default function Quotations() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmConvert, setConfirmConvert] = useState<string | null>(null);
   const [previewQuotation, setPreviewQuotation] = useState<any | null>(null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
   // Form state
   const [form, setForm] = useState({ client_id: '', template_id: '', project_id: 'none', title: 'Quotation', due_date: '', notes: '' });
@@ -92,6 +93,7 @@ export default function Quotations() {
       qc.invalidateQueries({ queryKey: ['quotations'] });
       toast({ title: 'Quotation created' });
       setShowCreate(false);
+      setSelectedClient(null);
       setForm({ client_id: '', template_id: '', project_id: 'none', title: 'Quotation', due_date: '', notes: '' });
       setItems([{ description: '', quantity: 1, unit_price: 0 }]);
     },
@@ -243,7 +245,14 @@ export default function Quotations() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Client</Label>
-                <Select value={form.client_id} onValueChange={v => setForm(f => ({ ...f, client_id: v }))}>
+                <Select
+                  value={form.client_id}
+                  onValueChange={v => {
+                    const c = (clients as Client[]).find(x => x.id === v) ?? null;
+                    setSelectedClient(c);
+                    setForm(f => ({ ...f, client_id: v }));
+                  }}
+                >
                   <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                   <SelectContent>
                     {clients.map((c: Client) => <SelectItem key={c.id} value={c.id}>{c.company || c.name}</SelectItem>)}
@@ -255,10 +264,34 @@ export default function Quotations() {
                 <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
               </div>
             </div>
+
+            {/* Client Details Panel */}
+            {selectedClient && (
+              <div className="rounded-lg border border-border/50 bg-muted/20 px-4 py-3 text-sm space-y-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">Client Details</p>
+                <p className="font-semibold text-foreground">{selectedClient.name}{selectedClient.company ? ` · ${selectedClient.company}` : ''}</p>
+                {selectedClient.email   && <p className="text-muted-foreground">{selectedClient.email}</p>}
+                {selectedClient.phone   && <p className="text-muted-foreground">{selectedClient.phone}</p>}
+                {selectedClient.address && <p className="text-muted-foreground whitespace-pre-line">{selectedClient.address}</p>}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Link to Project <span className="text-muted-foreground text-xs">(optional)</span></Label>
-                <Select value={form.project_id} onValueChange={v => setForm(f => ({ ...f, project_id: v }))}>
+                <Select
+                  value={form.project_id}
+                  onValueChange={v => {
+                    const p = (projects as any[]).find((x: any) => x.id === v);
+                    if (p?.client_id) {
+                      const c = (clients as Client[]).find(x => x.id === p.client_id) ?? null;
+                      setSelectedClient(c);
+                      setForm(f => ({ ...f, project_id: v, client_id: p.client_id }));
+                    } else {
+                      setForm(f => ({ ...f, project_id: v }));
+                    }
+                  }}
+                >
                   <SelectTrigger><SelectValue placeholder="No project" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No project</SelectItem>
