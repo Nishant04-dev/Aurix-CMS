@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Check, ChevronsUpDown, Plus, Loader2, Lock } from 'lucide-react';
+import { Check, ChevronsUpDown, Plus, Loader2, Lock, Edit2 } from 'lucide-react';
 import type { ProjectStatus, TaskStatus, InvoiceStatus, ProjectMember } from '@/types';
-import { useClients, useProjects, useTeamMembers, useCreateClient } from '@/hooks/use-database';
+import { useClients, useProjects, useTeamMembers, useCreateClient, useUpdateClient } from '@/hooks/use-database';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -192,6 +192,82 @@ export function ClientFormModal() {
           <Button type="submit" size="sm" disabled={createClient.isPending}>
             {createClient.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
             Create Client
+          </Button>
+        </div>
+      </form>
+    </FormModal>
+  );
+}
+
+// Edit Client Modal — pre-filled, uses PATCH, calls onSaved with updated client
+export function EditClientModal({ client, onSaved, trigger }: { client: any; onSaved: (updated: any) => void; trigger: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: '', company: '', email: '', phone: '', address: '' });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const { toast } = useToast();
+  const updateClient = useUpdateClient();
+
+  // Sync form when client prop changes or modal opens
+  React.useEffect(() => {
+    if (client) {
+      setForm({
+        name:    client.name    || '',
+        company: client.company || '',
+        email:   client.email   || '',
+        phone:   client.phone   || '',
+        address: client.address || '',
+      });
+    }
+  }, [client, open]);
+
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!form.name.trim())    e.name    = 'Name is required';
+    if (!form.company.trim()) e.company = 'Company is required';
+    if (!form.email.trim())   e.email   = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+    try {
+      const updated = await updateClient.mutateAsync({ id: client.id, ...form });
+      // Merge update into the original client object so all fields are present
+      const merged = { ...client, ...form, ...(updated ?? {}) };
+      onSaved(merged);
+      toast({ title: 'Client updated' });
+      setOpen(false);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    }
+  };
+
+  return (
+    <FormModal open={open} onOpenChange={setOpen} trigger={trigger} title="Edit Client">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <FormField label="Full Name" error={errors.name}>
+          <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} disabled={updateClient.isPending} />
+        </FormField>
+        <FormField label="Company" error={errors.company}>
+          <Input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} disabled={updateClient.isPending} />
+        </FormField>
+        <FormField label="Email" error={errors.email}>
+          <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} disabled={updateClient.isPending} />
+        </FormField>
+        <FormField label="Phone">
+          <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555-0100" disabled={updateClient.isPending} />
+        </FormField>
+        <FormField label="Address">
+          <Textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Street, City, Country" rows={2} disabled={updateClient.isPending} />
+        </FormField>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button type="submit" size="sm" disabled={updateClient.isPending}>
+            {updateClient.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+            Save Changes
           </Button>
         </div>
       </form>
@@ -680,7 +756,18 @@ export function InvoiceFormModal({ onSuccess, initialData, trigger }: { onSucces
           {/* Client Details Panel */}
           {selectedClient && (
             <div className="rounded-lg border border-border/50 bg-muted/20 px-4 py-3 text-sm space-y-0.5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">Client Details</p>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Client Details</p>
+                <EditClientModal
+                  client={selectedClient}
+                  onSaved={updated => setSelectedClient(updated)}
+                  trigger={
+                    <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground gap-1">
+                      <Edit2 className="h-3 w-3" /> Edit
+                    </Button>
+                  }
+                />
+              </div>
               <p className="font-semibold text-foreground">{selectedClient.name}{selectedClient.company ? ` · ${selectedClient.company}` : ''}</p>
               {selectedClient.email   && <p className="text-muted-foreground">{selectedClient.email}</p>}
               {selectedClient.phone   && <p className="text-muted-foreground">{selectedClient.phone}</p>}

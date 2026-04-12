@@ -23,10 +23,11 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Plus, MoreHorizontal, ArrowRight, Trash2, Send, Lock, Eye, Mail, ExternalLink } from 'lucide-react';
+import { Loader2, Plus, MoreHorizontal, ArrowRight, Trash2, Send, Lock, Eye, Mail, ExternalLink, Edit2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { DocumentRenderer, type DocumentData } from '@/components/DocumentRenderer';
+import { EditClientModal } from '@/components/FormModals';
 import { useOrganization } from '@/hooks/use-organization';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -268,7 +269,18 @@ export default function Quotations() {
             {/* Client Details Panel */}
             {selectedClient && (
               <div className="rounded-lg border border-border/50 bg-muted/20 px-4 py-3 text-sm space-y-0.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">Client Details</p>
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Client Details</p>
+                  <EditClientModal
+                    client={selectedClient}
+                    onSaved={updated => setSelectedClient(updated)}
+                    trigger={
+                      <button type="button" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent">
+                        <Edit2 className="h-3 w-3" /> Edit
+                      </button>
+                    }
+                  />
+                </div>
                 <p className="font-semibold text-foreground">{selectedClient.name}{selectedClient.company ? ` · ${selectedClient.company}` : ''}</p>
                 {selectedClient.email   && <p className="text-muted-foreground">{selectedClient.email}</p>}
                 {selectedClient.phone   && <p className="text-muted-foreground">{selectedClient.phone}</p>}
