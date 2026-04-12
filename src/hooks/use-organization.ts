@@ -16,8 +16,7 @@ export interface Organization {
   address: string | null;
   phone: string | null;
   email?: string | null;
-  currency: string;
-  timezone: string;
+  currency: string;  timezone: string;
   plan: string;
   status: string;
   template_id: string | null;

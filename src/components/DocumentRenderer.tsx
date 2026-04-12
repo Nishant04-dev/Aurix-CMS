@@ -148,18 +148,26 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
           {/* ── Header ── */}
           <div style={{ background: cfg.headerBg, color: cfg.headerText }} className="p-6">
             <div className="flex items-start justify-between">
+              {/* Left: org identity */}
               <div>
-                {orgLogo
-                  ? <img src={orgLogo} alt="logo" className="h-10 mb-2 object-contain" />
-                  : <div className="text-xl font-bold mb-1">{orgName || 'Your Company'}</div>
-                }
-                <div className="text-xs space-y-0.5" style={{ color: cfg.headerText, opacity: 0.85 }}>
-                  {orgAddress && <div>{orgAddress}</div>}
+                {orgLogo && (
+                  <img src={orgLogo} alt="logo" className="h-10 mb-2 object-contain" />
+                )}
+                <div
+                  className="font-bold mb-1"
+                  style={{ fontSize: '15px', color: cfg.headerText }}
+                >
+                  {orgName || 'Your Company'}
+                </div>
+                <div className="space-y-0.5" style={{ fontSize: '11px', color: cfg.headerText, opacity: 0.8 }}>
+                  {orgAddress && <div style={{ whiteSpace: 'pre-line' }}>{orgAddress}</div>}
                   {orgEmail   && <div>{orgEmail}</div>}
                   {orgPhone   && <div>{orgPhone}</div>}
                   {orgGst     && <div>GST: {orgGst}</div>}
                 </div>
               </div>
+
+              {/* Right: document type + number + status */}
               <div className="text-right">
                 <div className="text-2xl font-bold uppercase tracking-wider">
                   {data.type === 'invoice' ? 'Invoice' : (data.title || 'Quotation')}

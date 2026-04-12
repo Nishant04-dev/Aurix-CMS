@@ -18,6 +18,7 @@ const UpdateOrgSchema = z.object({
   payment_terms: z.string().max(2000).optional().nullable(),
   bank_details:  z.string().max(2000).optional().nullable(),
   upi_id:        z.string().max(100).optional().nullable(),
+  email:         z.string().email().optional().nullable(),
 });
 
 export async function getOrganization(req, res) {
@@ -27,7 +28,7 @@ export async function getOrganization(req, res) {
 
     const { data, error } = await supabase
       .from('organizations')
-      .select('id, name, logo_url, website, gst_number, address, phone, currency, timezone, plan, status, created_at, template_id, branding, terms, payment_terms, bank_details, upi_id')
+      .select('id, name, logo_url, website, gst_number, address, phone, email, currency, timezone, plan, status, created_at, template_id, branding, terms, payment_terms, bank_details, upi_id')
       .eq('id', orgId)
       .single();
     if (error) throw error;
@@ -49,7 +50,7 @@ export async function updateOrganization(req, res) {
       .from('organizations')
       .update(data)
       .eq('id', orgId)
-      .select('id, name, logo_url, website, gst_number, address, phone, currency, timezone, plan, status, template_id, branding, terms, payment_terms, bank_details, upi_id')
+      .select('id, name, logo_url, website, gst_number, address, phone, email, currency, timezone, plan, status, template_id, branding, terms, payment_terms, bank_details, upi_id')
       .single();
     if (error) throw error;
     return ok(res, updated, 'Organization updated');

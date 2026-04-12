@@ -78,7 +78,7 @@ function OrgSettingsForm() {
   });
 
   const [form, setForm] = useState({
-    name: '', website: '', phone: '', address: '',
+    name: '', website: '', phone: '', address: '', email: '',
     logo_url: '', gst_number: '', currency: 'INR', timezone: 'UTC',
   });
   const [branding, setBranding] = useState({ color: '#6366f1', font: 'inter', show_logo: true, show_gst: true });
@@ -94,6 +94,7 @@ function OrgSettingsForm() {
         website:    settings.website     || '',
         phone:      settings.phone       || '',
         address:    settings.address     || '',
+        email:      settings.email       || '',
         logo_url:   settings.logo_url    || '',
         gst_number: settings.gst_number  || '',
         currency:   settings.currency    || 'INR',
@@ -153,6 +154,7 @@ function OrgSettingsForm() {
       await updateSettings.mutateAsync({
         name: form.name.trim(), website: form.website.trim() || null,
         phone: form.phone.trim() || null, address: form.address.trim() || null,
+        email: form.email.trim() || null,
         logo_url: form.logo_url || null, gst_number: form.gst_number.trim() || null,
         currency: form.currency, timezone: form.timezone,
         branding, template_id: selectedTemplateId === 'none' ? null : (selectedTemplateId || null),
@@ -205,6 +207,10 @@ function OrgSettingsForm() {
               <Label>Phone</Label>
               <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555-0100" disabled={disabled} />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Email</Label>
+            <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="billing@yourcompany.com" disabled={disabled} />
           </div>
           <div className="space-y-2">
             <Label>Address</Label>
