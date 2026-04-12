@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/use-permissions';
+import { usePlan } from '@/hooks/use-plan';
 import {
   useChannels, useMessages, useSendMessage,
   useCreateChannel, useDeleteChannel, useRealtimeMessages,
@@ -23,10 +24,15 @@ import { useQueryClient } from '@tanstack/react-query';
 export default function Chat() {
   const { user } = useAuth();
   const { isAdmin } = usePermissions();
+  const { plan } = usePlan();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const CHAT_LIMITS: Record<string, number> = { free: 2, pro: 4, enterprise: 10 };
+  const maxChats = CHAT_LIMITS[plan] ?? 2;
+
   const { data: channels = [], isLoading: channelsLoading } = useChannels();
+  const atLimit = channels.length >= maxChats;
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -132,9 +138,18 @@ export default function Chat() {
       {/* ── Sidebar ── */}
       <div className="w-60 shrink-0 border-r border-border/50 flex flex-col bg-muted/10">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Channels</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Channels</span>
+            <span className="text-[10px] font-bold text-muted-foreground">{channels.length}/{maxChats}</span>
+          </div>
           {isAdmin && (
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowCreate(true)}>
+            <Button
+              variant="ghost" size="icon" className="h-6 w-6"
+              onClick={() => atLimit
+                ? toast({ variant: 'destructive', title: `Channel limit reached (${channels.length}/${maxChats})`, description: `Upgrade to ${plan === 'free' ? 'Pro' : 'Enterprise'} to create more channels.` })
+                : setShowCreate(true)
+              }
+            >
               <Plus className="h-3.5 w-3.5" />
             </Button>
           )}

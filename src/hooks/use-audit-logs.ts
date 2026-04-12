@@ -30,7 +30,7 @@ export function useAuditLogs(filters: AuditFilters = {}) {
   return useQuery({
     queryKey: ['audit-logs', orgId, filters],
     queryFn: () =>
-      api.get<{ data: AuditLogEntry[]; total: number; page: number; limit: number }>(
+      api.get<{ data: AuditLogEntry[]; total: number; page: number; limit: number; plan: string; max_days: number }>(
         '/audit-logs',
         {
           action:  filters.action,

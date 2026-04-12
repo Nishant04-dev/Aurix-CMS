@@ -10,6 +10,16 @@ export async function getAuditLogs(req, res) {
       return forbidden(res, 'Audit logs are only accessible to admins');
     }
 
+    // ── Plan-based date range enforcement ─────────────────────
+    const AUDIT_DAYS = { free: 1, pro: 3, enterprise: 7 };
+    const { data: org } = await supabase.from('organizations').select('plan').eq('id', orgId).single();
+    const orgPlan = org?.plan || 'free';
+    const maxDays = AUDIT_DAYS[orgPlan] ?? 1;
+
+    const planCutoff = new Date();
+    planCutoff.setDate(planCutoff.getDate() - maxDays);
+    const planCutoffISO = planCutoff.toISOString();
+
     const {
       action,
       actor_id,
@@ -22,16 +32,19 @@ export async function getAuditLogs(req, res) {
     const limit  = Math.min(parseInt(rawLimit) || 50, 200);
     const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
 
+    // Enforce plan cutoff: use the later of planCutoff and user-supplied from
+    const effectiveFrom = from && new Date(from) > planCutoff ? from : planCutoffISO;
+
     let query = supabase
       .from('audit_logs')
       .select('*', { count: 'exact' })
       .eq('org_id', orgId)
+      .gte('created_at', effectiveFrom)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (action)   query = query.eq('action', action);
     if (actor_id) query = query.eq('actor_id', actor_id);
-    if (from)     query = query.gte('created_at', from);
     if (to)       query = query.lte('created_at', to);
 
     const { data: logs, error, count } = await query;
@@ -61,7 +74,14 @@ export async function getAuditLogs(req, res) {
       created_at:  row.created_at,
     }));
 
-    return ok(res, { data: entries, total: count ?? 0, page: parseInt(page) || 1, limit });
+    return ok(res, {
+      data: entries,
+      total: count ?? 0,
+      page: parseInt(page) || 1,
+      limit,
+      plan: orgPlan,
+      max_days: maxDays,
+    });
   } catch (err) {
     logger.error('getAuditLogs error', { err: err.message });
     return serverError(res, err.message);

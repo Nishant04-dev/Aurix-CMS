@@ -17,6 +17,21 @@ export async function createChannel(req, res) {
       return badRequest(res, 'Channel name must be 1–50 lowercase alphanumeric characters or hyphens');
     }
 
+    // ── Plan-based chat channel limit ──────────────────────────
+    const CHAT_LIMITS = { free: 2, pro: 4, enterprise: 10 };
+    const { data: org } = await supabase.from('organizations').select('plan').eq('id', orgId).single();
+    const orgPlan = org?.plan || 'free';
+    const maxChats = CHAT_LIMITS[orgPlan] ?? 2;
+
+    const { count: existingCount } = await supabase
+      .from('chat_channels')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId);
+
+    if ((existingCount ?? 0) >= maxChats) {
+      return forbidden(res, `Chat channel limit reached (${existingCount}/${maxChats} on ${orgPlan} plan). Upgrade to create more channels.`);
+    }
+
     const { data: channel, error } = await supabase
       .from('chat_channels')
       .insert({ org_id: orgId, name, created_by: userId })

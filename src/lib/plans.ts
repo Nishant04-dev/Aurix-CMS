@@ -33,6 +33,19 @@ export interface Plan {
   features: FeatureKey[];
 }
 
+// ── Plan-based limits ─────────────────────────────────────────
+export const PLAN_CHAT_LIMITS: Record<PlanId, number> = {
+  free:       2,
+  pro:        4,
+  enterprise: 10,
+};
+
+export const PLAN_AUDIT_DAYS: Record<PlanId, number> = {
+  free:       1,
+  pro:        3,
+  enterprise: 7,
+};
+
 export const PLANS: Record<PlanId, Plan> = {
   free: {
     name: 'Free',
@@ -46,8 +59,12 @@ export const PLANS: Record<PlanId, Plan> = {
       'tasks',
       'messages',
       'invoices_basic',
+      'invoices',
+      'quotations',        // unlimited on all plans
       'team_limited',
       'invitations',
+      'roles_basic',       // roles unlimited on all plans
+      'audit_logs_limited',
     ],
   },
   pro: {
@@ -62,6 +79,7 @@ export const PLANS: Record<PlanId, Plan> = {
       'tasks',
       'messages',
       'invoices',
+      'quotations',
       'files',
       'team',
       'roles_basic',
@@ -69,7 +87,6 @@ export const PLANS: Record<PlanId, Plan> = {
       'team_chat',
       'audit_logs_limited',
       'settings',
-      'quotations',
       'templates_pro',
     ],
   },

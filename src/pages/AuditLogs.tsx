@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useAuditLogs, type AuditFilters } from '@/hooks/use-audit-logs';
+import { usePlan } from '@/hooks/use-plan';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, ChevronDown, ChevronRight, ClipboardList } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronRight, ClipboardList, Download, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const ACTION_OPTIONS = [
@@ -32,6 +33,10 @@ export default function AuditLogs() {
   const { isAdmin } = usePermissions();
   if (!isAdmin) return <Navigate to="/" replace />;
 
+  const { plan, isEnterprise } = usePlan();
+  const AUDIT_DAYS: Record<string, number> = { free: 1, pro: 3, enterprise: 7 };
+  const maxDays = AUDIT_DAYS[plan] ?? 1;
+
   const [filters, setFilters] = useState<AuditFilters>({ page: 1, limit: 50 });
   const [expanded, setExpanded] = useState<string | null>(null);
   const { data, isLoading } = useAuditLogs(filters);
@@ -42,14 +47,56 @@ export default function AuditLogs() {
   const limit   = data?.limit ?? 50;
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
+  const handleDownloadCSV = () => {
+    const rows = [
+      ['Time', 'Actor', 'Email', 'Action', 'Entity', 'Entity ID'],
+      ...entries.map(e => [
+        new Date(e.created_at).toLocaleString(),
+        e.actor_name, e.actor_email, e.action,
+        e.entity ?? '', e.entity_id ?? '',
+      ]),
+    ];
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'audit-logs.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
-      <div className="flex items-center gap-3">
-        <ClipboardList className="h-6 w-6 text-primary" />
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Audit Logs</h1>
-          <p className="text-sm text-muted-foreground">Track all org-level actions</p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <ClipboardList className="h-6 w-6 text-primary" />
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Audit Logs</h1>
+            <p className="text-sm text-muted-foreground">Track all org-level actions</p>
+          </div>
         </div>
+        {isEnterprise && (
+          <Button size="sm" variant="outline" onClick={handleDownloadCSV} className="gap-1.5">
+            <Download className="h-4 w-4" /> Download CSV
+          </Button>
+        )}
+      </div>
+
+      {/* Plan info banner */}
+      <div className={cn(
+        'flex items-center justify-between gap-3 px-4 py-3 rounded-xl border text-sm',
+        plan === 'enterprise' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+        plan === 'pro'        ? 'bg-blue-50 border-blue-200 text-blue-700' :
+                                'bg-amber-50 border-amber-200 text-amber-700'
+      )}>
+        <span>
+          Showing logs from the last <strong>{maxDays} day{maxDays > 1 ? 's' : ''}</strong>
+          {' '}({plan} plan).
+          {plan !== 'enterprise' && ' Upgrade for longer history.'}
+        </span>
+        {plan !== 'enterprise' && (
+          <a href="/settings/billing" className="flex items-center gap-1 font-semibold underline underline-offset-2">
+            <Zap className="h-3.5 w-3.5" /> Upgrade
+          </a>
+        )}
       </div>
 
       {/* Filters */}
