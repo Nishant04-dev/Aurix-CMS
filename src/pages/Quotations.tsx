@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrgCurrency } from '@/hooks/use-org-currency';
+import { formatDate } from '@/lib/date';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -185,7 +186,7 @@ export default function Quotations() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">
-                  {q.due_date ? new Date(q.due_date).toLocaleDateString() : '—'}
+                  {formatDate(q.due_date)}
                 </td>
                 <td className="px-4 py-3">
                   {/* Clients get a view/download button; managers get full actions */}

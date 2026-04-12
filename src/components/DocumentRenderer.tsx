@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Download, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/currency';
+import { formatDate } from '@/lib/date';
 
 export interface TaxLine {
   id: string;
@@ -49,11 +50,7 @@ const TEMPLATES: Record<string, TemplateConfig> = {
   creative:  { bg: '#fdf4ff', headerBg: '#ec4899', headerText: '#ffffff', accent: '#ec4899',  tableHeaderBg: '#fce7f3', tableHeaderText: '#9d174d', borderColor: '#fbcfe8', font: 'sans-serif' },
 };
 
-function safeDate(val?: string | null): string {
-  if (!val) return '—';
-  try { const d = new Date(val); return isNaN(d.getTime()) ? '—' : d.toLocaleDateString(); }
-  catch { return '—'; }
-}
+// safeDate removed — use formatDate from @/lib/date instead
 
 interface Props {
   data: DocumentData;
@@ -212,13 +209,13 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
               {data.created_at && (
                 <div className="mb-1">
                   <span className="text-gray-400">Date: </span>
-                  {safeDate(data.created_at)}
+                  {formatDate(data.created_at)}
                 </div>
               )}
               {data.due_date && (
                 <div>
                   <span className="text-gray-400">Due: </span>
-                  {safeDate(data.due_date)}
+                  {formatDate(data.due_date)}
                 </div>
               )}
             </div>

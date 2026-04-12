@@ -71,6 +71,11 @@ export async function createQuotation(req, res) {
 
     const data = CreateQuotationSchema.parse(req.body);
 
+    // Validate due_date format if provided
+    if (data.due_date && isNaN(new Date(data.due_date).getTime())) {
+      return badRequest(res, 'Invalid due_date format. Use YYYY-MM-DD');
+    }
+
     const { data: client } = await supabase
       .from('clients').select('id').eq('id', data.client_id).eq('org_id', orgId).single();
     if (!client) return badRequest(res, 'Client not found in your organization');
@@ -162,7 +167,12 @@ export async function updateQuotation(req, res) {
     if (status)   updates.status   = status;
     if (title)    updates.title    = title;
     if (notes !== undefined) updates.notes = notes;
-    if (due_date !== undefined) updates.due_date = due_date;
+    if (due_date !== undefined) {
+      if (due_date && isNaN(new Date(due_date).getTime())) {
+        return badRequest(res, 'Invalid due_date format. Use YYYY-MM-DD');
+      }
+      updates.due_date = due_date;
+    }
 
     const { data, error } = await supabase
       .from('quotations').update(updates).eq('id', id).eq('org_id', orgId).select().single();

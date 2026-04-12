@@ -44,6 +44,14 @@ export async function createInvoice(req, res) {
 
     const data = CreateInvoiceSchema.parse(req.body);
 
+    // Validate due_date is not before today (basic sanity check)
+    if (data.due_date) {
+      const due = new Date(data.due_date);
+      if (isNaN(due.getTime())) return badRequest(res, 'Invalid due_date format. Use YYYY-MM-DD');
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      if (due < today) return badRequest(res, 'due_date cannot be in the past');
+    }
+
     // Validate client belongs to org
     const { data: client } = await supabase
       .from('clients').select('id').eq('id', data.client_id).eq('org_id', orgId).single();

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useInvoices, useClients } from '@/hooks/use-database';
+import { formatDate } from '@/lib/date';
 import { useOrgCurrency } from '@/hooks/use-org-currency';
 import { Button } from '@/components/ui/button';
 import { 
@@ -262,7 +263,7 @@ export default function Invoices() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col items-start gap-0.5">
-                         <span className="text-xs font-semibold text-muted-foreground">{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'No Due Date'}</span>
+                         <span className="text-xs font-semibold text-muted-foreground">{inv.dueDate ? formatDate(inv.dueDate) : inv.due_date ? formatDate(inv.due_date) : 'No Due Date'}</span>
                          {inv.status === 'overdue' && <span className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">Overdue</span>}
                       </div>
                     </td>
