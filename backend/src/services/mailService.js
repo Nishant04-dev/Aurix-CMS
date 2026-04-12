@@ -1,6 +1,17 @@
 import nodemailer from 'nodemailer';
 import { logger } from '../utils/logger.js';
 
+/** Timezone-safe date formatter — matches frontend formatDate() */
+function formatDate(date) {
+  if (!date) return 'N/A';
+  try {
+    const iso = String(date).length > 10 ? String(date).slice(0, 10) : String(date);
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d.getTime())) return 'N/A';
+    return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(d);
+  } catch { return 'N/A'; }
+}
+
 const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, APP_URL } = process.env;
 const smtpConfigured = Boolean(SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS);
 
@@ -137,7 +148,7 @@ export async function sendInvitationEmail(toEmail, orgName, inviterName, role) {
  */
 export async function sendInvoiceEmail({ toEmail, clientName, orgName, invoiceId, amount, currency, dueDate, appUrl }) {
   const fmt = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: currency || 'INR' }).format(n);
-  const due = dueDate ? new Date(dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : 'N/A';
+  const due = formatDate(dueDate);
   const ref = invoiceId.slice(0, 8).toUpperCase();
   return sendMail({
     to: toEmail,
@@ -170,7 +181,7 @@ export async function sendInvoiceEmail({ toEmail, clientName, orgName, invoiceId
  */
 export async function sendQuotationEmail({ toEmail, clientName, orgName, quotationId, title, amount, currency, dueDate, appUrl }) {
   const fmt = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: currency || 'INR' }).format(n);
-  const due = dueDate ? new Date(dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : 'N/A';
+  const due = formatDate(dueDate);
   const ref = quotationId.slice(0, 8).toUpperCase();
   return sendMail({
     to: toEmail,

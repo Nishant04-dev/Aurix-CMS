@@ -25,6 +25,7 @@ export interface DocumentData {
   status: string;
   amount: number;
   currency: string;
+  issue_date?: string | null;
   due_date?: string | null;
   notes?: string | null;
   items?: { description: string; quantity?: number; unit_price?: number; amount?: number }[];
@@ -206,10 +207,10 @@ export function DocumentRenderer({ data, templateSlug = 'basic', showDownload = 
               )}
             </div>
             <div className="text-right text-xs text-gray-500">
-              {data.created_at && (
+              {(data.issue_date || data.created_at) && (
                 <div className="mb-1">
                   <span className="text-gray-400">Date: </span>
-                  {formatDate(data.created_at)}
+                  {formatDate(data.issue_date ?? data.created_at)}
                 </div>
               )}
               {data.due_date && (

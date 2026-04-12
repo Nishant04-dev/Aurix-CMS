@@ -71,9 +71,12 @@ export async function createQuotation(req, res) {
 
     const data = CreateQuotationSchema.parse(req.body);
 
-    // Validate due_date format if provided
-    if (data.due_date && isNaN(new Date(data.due_date).getTime())) {
-      return badRequest(res, 'Invalid due_date format. Use YYYY-MM-DD');
+    // Validate due_date format and >= today (issue date for quotations)
+    if (data.due_date) {
+      const due = new Date(data.due_date + 'T00:00:00');
+      if (isNaN(due.getTime())) return badRequest(res, 'Invalid due_date format. Use YYYY-MM-DD');
+      const issueDate = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00');
+      if (due < issueDate) return badRequest(res, 'due_date cannot be before the issue date (today)');
     }
 
     const { data: client } = await supabase

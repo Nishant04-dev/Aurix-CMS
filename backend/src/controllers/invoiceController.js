@@ -44,12 +44,12 @@ export async function createInvoice(req, res) {
 
     const data = CreateInvoiceSchema.parse(req.body);
 
-    // Validate due_date is not before today (basic sanity check)
+    // Validate due_date >= issue_date (today)
     if (data.due_date) {
-      const due = new Date(data.due_date);
+      const due      = new Date(data.due_date + 'T00:00:00');
       if (isNaN(due.getTime())) return badRequest(res, 'Invalid due_date format. Use YYYY-MM-DD');
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      if (due < today) return badRequest(res, 'due_date cannot be in the past');
+      const issueDate = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00');
+      if (due < issueDate) return badRequest(res, 'due_date cannot be before the issue date (today)');
     }
 
     // Validate client belongs to org
@@ -93,12 +93,14 @@ export async function createInvoice(req, res) {
     const finalAmount = round2(subtotal + taxTotal);
 
     // Direct insert when Redis is disabled
+    const issueDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
     const { data: invoice, error } = await supabase
       .from('invoices')
       .insert({
         client_id:    data.client_id,
         project_id:   data.project_id || null,
         amount:       finalAmount,
+        issue_date:   issueDate,
         due_date:     data.due_date,
         status:       data.status,
         description:  data.description || null,
@@ -265,7 +267,7 @@ export async function sendInvoiceByEmail(req, res) {
     }
 
     const { data: invoice } = await supabase
-      .from('invoices').select('id, amount, currency, due_date, client_id, org_id')
+      .from('invoices').select('id, amount, currency, issue_date, due_date, client_id, org_id')
       .eq('id', id).eq('org_id', orgId).maybeSingle();
     if (!invoice) return notFound(res, 'Invoice not found');
 
