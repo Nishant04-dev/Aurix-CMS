@@ -60,16 +60,17 @@ export default function Onboarding() {
     try {
       await api.post('/onboarding/provision', { org_name: orgName.trim() });
 
+      // Only show success AFTER confirmed server response
       setSuccess(true);
       toast({ title: 'Workspace created!', description: `Welcome to ${orgName}.` });
 
-      // Small delay so user sees the success state, then refresh
+      // Refresh auth context to pick up new org_id from backend
       setTimeout(async () => {
         await refreshUser();
       }, 1200);
     } catch (err: any) {
+      // Do NOT set success — keep form visible so user can retry
       setError(err.message || 'Failed to create workspace. Please try again.');
-    } finally {
       setLoading(false);
     }
   };

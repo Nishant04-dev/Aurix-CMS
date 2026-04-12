@@ -148,10 +148,11 @@ export default function Profile() {
       await upgradeToBusinessAccount();
       navigate('/onboarding');
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Error', description: err.message });
-    } finally {
-      setUpgradingBusiness(false);
+      toast({ variant: 'destructive', title: 'Upgrade failed', description: err.message });
+      setUpgradingBusiness(false); // restore button
     }
+    // Note: setUpgradingBusiness(false) is intentionally NOT called on success
+    // because we navigate away — avoids a flash of the button re-appearing
   };
 
   return (

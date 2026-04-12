@@ -1,23 +1,67 @@
 import { supabase } from '../config/supabase.js';
 import { ok, badRequest, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
+import { logAudit } from '../utils/auditLogger.js';
 
+/**
+ * Atomically provision a new organization for the current user.
+ * Uses a DB-level transaction (provision_new_organization RPC) so that
+ * org creation, membership assignment, and profile update are all-or-nothing.
+ */
 export async function provisionOrganization(req, res) {
-  try {
-    const { id: userId } = req.user;
-    const { org_name } = req.body;
-    if (!org_name?.trim()) return badRequest(res, 'org_name is required');
+  const { id: userId } = req.user;
+  const { org_name } = req.body;
 
-    const { data, error } = await supabase.rpc('provision_new_organization', {
+  if (!org_name?.trim()) return badRequest(res, 'org_name is required');
+
+  logger.info('Onboarding: provision start', { userId, org_name: org_name.trim() });
+
+  try {
+    // Guard: user must not already have an active org
+    const { data: existing } = await supabase
+      .from('memberships')
+      .select('org_id')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .not('org_id', 'is', null)
+      .limit(1)
+      .maybeSingle();
+
+    if (existing?.org_id) {
+      logger.warn('Onboarding: user already has an org', { userId, orgId: existing.org_id });
+      return badRequest(res, 'You already belong to an organization');
+    }
+
+    // Atomic: create org + membership + update profile in one DB transaction
+    const { data: orgId, error } = await supabase.rpc('provision_new_organization', {
       p_org_name: org_name.trim(),
       p_user_id:  userId,
     });
-    if (error) throw error;
 
-    logger.info('Organization provisioned', { orgId: data, userId });
-    return ok(res, { org_id: data }, 'Organization created');
+    if (error) {
+      logger.error('Onboarding: provision_new_organization RPC failed', { userId, err: error.message });
+      throw error;
+    }
+
+    if (!orgId) {
+      logger.error('Onboarding: RPC returned null org_id', { userId });
+      throw new Error('Organization creation failed — no ID returned');
+    }
+
+    logger.info('Onboarding: org provisioned successfully', { userId, orgId });
+
+    logAudit({
+      orgId,
+      actorId: userId,
+      action:  'org.provisioned',
+      targetType: 'organization',
+      targetId:   orgId,
+      metadata: { org_name: org_name.trim() },
+    });
+
+    return ok(res, { org_id: orgId }, 'Organization created');
   } catch (err) {
-    logger.error('provisionOrganization error', { err: err.message });
+    logger.error('Onboarding: provision failed', { userId, err: err.message });
     return serverError(res, err.message);
   }
 }

@@ -235,11 +235,14 @@ export function requireRole(...roles) {
 
 /**
  * Require platform owner access.
- * Uses manual two-step fetch to avoid implicit join issues.
+ * Primary: isPlatformOwner flag set during authenticate() via is_platform_owner profile column.
+ * Secondary: platform_user_roles table with 'Owner' role (for delegated platform admins).
  */
 export async function requirePlatformOwner(req, res, next) {
+  // Fast path — already resolved during authenticate()
   if (req.user?.isPlatformOwner) return next();
 
+  // Secondary: check platform_user_roles table (delegated platform admins)
   try {
     const { data: userRole } = await supabase
       .from('platform_user_roles')
@@ -254,15 +257,23 @@ export async function requirePlatformOwner(req, res, next) {
         .eq('id', userRole.role_id)
         .maybeSingle();
 
-      if (role?.name === 'Owner') {
-        req.user.isPlatformOwner = true;
-        return next();
-      }
-      // Also accept lowercase/variant spellings
       if (role?.name?.toLowerCase() === 'owner') {
         req.user.isPlatformOwner = true;
         return next();
       }
+    }
+
+    // Tertiary: re-check is_platform_owner directly from DB (handles stale req.user)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_platform_owner')
+      .eq('id', req.user.id)
+      .maybeSingle();
+
+    if (profile?.is_platform_owner === true) {
+      req.user.isPlatformOwner = true;
+      logger.info('requirePlatformOwner: granted via is_platform_owner profile flag', { userId: req.user.id });
+      return next();
     }
   } catch (err) {
     logger.warn('requirePlatformOwner check failed', { err: err.message });
