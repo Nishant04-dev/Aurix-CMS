@@ -52,41 +52,34 @@ export default function Invitations() {
   const { can } = usePermissions();
   const canInvite = can('invite_user');
 
-  const [received, setReceived]     = useState<any[]>([]);
-  const [sent, setSent]             = useState<any[]>([]);
-  const [loadingR, setLoadingR]     = useState(true);
-  const [loadingS, setLoadingS]     = useState(true);
-  const [actionId, setActionId]     = useState<string | null>(null);
+  const [received, setReceived] = useState<any[]>([]);
+  const [sent, setSent]         = useState<any[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [actionId, setActionId] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const { toast } = useToast();
 
-  const loadReceived = async () => {
+  const loadAll = async () => {
     if (!user) return;
-    setLoadingR(true);
+    setLoading(true);
     try {
       const data = await api.get<any>('/invitations');
-      setReceived(data?.received || []);
+      setReceived(data?.received ?? []);
+      setSent(data?.sent ?? []);
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Error', description: err.message });
+      toast({ variant: 'destructive', title: 'Error loading invitations', description: err.message });
+      setReceived([]);
+      setSent([]);
     } finally {
-      setLoadingR(false);
+      setLoading(false);
     }
   };
 
-  const loadSent = async () => {
-    if (!user) return;
-    setLoadingS(true);
-    try {
-      const data = await api.get<any>('/invitations');
-      setSent(data?.sent || []);
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Error', description: err.message });
-    } finally {
-      setLoadingS(false);
-    }
-  };
+  // Keep these as aliases so existing handlers still work
+  const loadReceived = loadAll;
+  const loadSent = loadAll;
 
-  useEffect(() => { loadReceived(); loadSent(); }, [user]);
+  useEffect(() => { loadAll(); }, [user]);
 
   const handleAccept = async (id: string) => {
     setActionId(id + 'accept');
@@ -212,7 +205,7 @@ export default function Invitations() {
         </TabsList>
 
         <TabsContent value="received" className="mt-4 space-y-4">
-          {loadingR ? (
+          {loading ? (
             <div className="flex h-32 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary/40" /></div>
           ) : (
             <>
@@ -287,7 +280,7 @@ export default function Invitations() {
 
         {canInvite && (
           <TabsContent value="sent" className="mt-4 space-y-4">
-            {loadingS ? (
+            {loading ? (
               <div className="flex h-32 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary/40" /></div>
             ) : (
               <>

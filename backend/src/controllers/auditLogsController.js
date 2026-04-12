@@ -1,6 +1,7 @@
 import { supabase } from '../config/supabase.js';
 import { ok, badRequest, forbidden, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
+import { getLimits } from '../config/planLimits.js';
 
 export async function getAuditLogs(req, res) {
   try {
@@ -11,10 +12,10 @@ export async function getAuditLogs(req, res) {
     }
 
     // ── Plan-based date range enforcement ─────────────────────
-    const AUDIT_DAYS = { free: 1, pro: 3, enterprise: 7 };
     const { data: org } = await supabase.from('organizations').select('plan').eq('id', orgId).single();
+    const limits = getLimits(org?.plan);
     const orgPlan = org?.plan || 'free';
-    const maxDays = AUDIT_DAYS[orgPlan] ?? 1;
+    const maxDays = limits.audit_days;
 
     const planCutoff = new Date();
     planCutoff.setDate(planCutoff.getDate() - maxDays);

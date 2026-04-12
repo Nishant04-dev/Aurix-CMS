@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { inviteQueue } from '../queue/queues.js';
 import { supabase } from '../config/supabase.js';
 import { ok, created, badRequest, forbidden, notFound, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
@@ -39,7 +38,7 @@ export async function sendInvitation(req, res) {
       .eq('org_id', orgId)
       .eq('target_user_id', target.id)
       .eq('status', 'pending')
-      .single();
+      .maybeSingle();
 
     if (existing) return badRequest(res, 'A pending invitation already exists for this user');
 
@@ -49,23 +48,35 @@ export async function sendInvitation(req, res) {
       .select('power_level')
       .eq('org_id', orgId)
       .ilike('name', role_name)
-      .single();
+      .maybeSingle();
 
     if (targetRole && targetRole.power_level >= powerLevel) {
       return forbidden(res, 'Cannot assign a role equal to or higher than your own');
     }
 
-    const job = await inviteQueue.add('send-invitation', {
-      displayId: display_id,
-      roleName:  role_name,
-      type,
-      userId,
-      orgId,
-    });
+    // ── Insert invitation directly (no queue) ──────────────────
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7-day expiry
 
-    logger.info('Invitation queued', { jobId: job.id, displayId: display_id, orgId });
+    const { data: invitation, error: invErr } = await supabase
+      .from('invitations')
+      .insert({
+        org_id:         orgId,
+        invited_by:     userId,
+        target_user_id: target.id,
+        role_name,
+        type,
+        status:         'pending',
+        expires_at:     expiresAt.toISOString(),
+      })
+      .select()
+      .single();
+
+    if (invErr) throw invErr;
+
+    logger.info('Invitation created', { invitationId: invitation.id, displayId: display_id, orgId });
     logAudit({ orgId, actorId: userId, action: 'invite.sent', targetType: 'invitation', targetId: target.id, metadata: { role_name, type, display_id } });
-    return created(res, { jobId: job.id, targetName: target.name || target.email }, 'Invitation sent');
+    return created(res, { id: invitation.id, targetName: target.name || target.email }, 'Invitation sent');
   } catch (err) {
     if (err.name === 'ZodError') return badRequest(res, err.errors.map(e => e.message).join('; '));
     logger.error('sendInvitation error', { err: err.message });
@@ -89,56 +100,58 @@ export async function respondToInvitation(req, res) {
       if (!inv) return notFound(res, 'Invitation not found');
       if (inv.invited_by !== userId) return forbidden(res, 'You can only cancel your own invitations');
       const { error } = await supabase
-        .from('invitations').update({ status: 'cancelled' }).eq('id', invitation_id).eq('invited_by', userId);
+        .from('invitations').update({ status: 'cancelled' }).eq('id', invitation_id);
       if (error) throw error;
       return ok(res, null, 'Invitation cancelled');
     }
 
-    // Ban check — only needed for accept
-    if (action === 'accept') {
-      const { data: inv } = await supabase
-        .from('invitations').select('org_id').eq('id', invitation_id).maybeSingle();
-      if (inv?.org_id) {
-        const { data: ban } = await supabase
-          .from('banned_members').select('id')
-          .eq('user_id', userId).eq('org_id', inv.org_id).maybeSingle();
-        if (ban) return forbidden(res, 'You are banned from this organization.');
-      }
+    // Fetch the invitation
+    const { data: inv } = await supabase
+      .from('invitations')
+      .select('id, org_id, role_name, target_user_id, status')
+      .eq('id', invitation_id)
+      .maybeSingle();
+
+    if (!inv) return notFound(res, 'Invitation not found');
+    if (inv.target_user_id !== userId) return forbidden(res, 'This invitation is not for you');
+    if (inv.status !== 'pending') return badRequest(res, `Invitation is already ${inv.status}`);
+
+    // Ban check for accept
+    if (action === 'accept' && inv.org_id) {
+      const { data: ban } = await supabase
+        .from('banned_members').select('id')
+        .eq('user_id', userId).eq('org_id', inv.org_id).maybeSingle();
+      if (ban) return forbidden(res, 'You are banned from this organization.');
     }
 
-    const fn = action === 'accept' ? 'accept_invitation' : 'reject_invitation';
-    const { data, error } = await supabase.rpc(fn, { p_invitation_id: invitation_id });
+    // Update invitation status directly
+    const newStatus = action === 'accept' ? 'accepted' : 'rejected';
+    const updateData = { status: newStatus };
+    if (action === 'accept') updateData.accepted_at = new Date().toISOString();
 
-    if (error) return serverError(res, error.message);
-    if (data?.error) return badRequest(res, data.error);
+    const { error: updateErr } = await supabase
+      .from('invitations').update(updateData).eq('id', invitation_id);
+    if (updateErr) throw updateErr;
 
-    // On accept: create/restore membership record
-    if (action === 'accept') {
-      const { data: fullInv } = await supabase
-        .from('invitations')
-        .select('org_id, role_name')
-        .eq('id', invitation_id)
-        .maybeSingle();
-
-      if (fullInv?.org_id) {
-        await supabase
-          .from('memberships')
-          .upsert({
-            user_id: userId,
-            org_id:  fullInv.org_id,
-            role:    fullInv.role_name || 'client',
-            status:  'active',
-          }, { onConflict: 'user_id,org_id' });
-      }
+    // On accept: update profile org_id + create membership
+    if (action === 'accept' && inv.org_id) {
+      await supabase.from('profiles').update({ org_id: inv.org_id }).eq('id', userId);
+      await supabase.from('memberships').upsert({
+        user_id: userId,
+        org_id:  inv.org_id,
+        role:    inv.role_name || 'client',
+        status:  'active',
+      }, { onConflict: 'user_id,org_id' });
     }
 
     const auditAction = action === 'accept' ? 'invite.accepted' : 'invite.rejected';
-    const { data: inv } = await supabase.from('invitations').select('org_id').eq('id', invitation_id).maybeSingle();
-    if (inv?.org_id) {
-      logAudit({ orgId: inv.org_id, actorId: userId, action: auditAction, targetType: 'invitation', targetId: invitation_id });
-    }
+    logAudit({ orgId: inv.org_id, actorId: userId, action: auditAction, targetType: 'invitation', targetId: invitation_id });
 
-    return ok(res, data, data?.message || `Invitation ${action}ed`);
+    const message = action === 'accept'
+      ? 'You have joined the organization!'
+      : 'Invitation declined';
+
+    return ok(res, { message }, message);
   } catch (err) {
     logger.error('respondToInvitation error', { err: err.message });
     return serverError(res, err.message);

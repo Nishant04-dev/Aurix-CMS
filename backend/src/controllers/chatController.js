@@ -2,6 +2,7 @@ import { supabase } from '../config/supabase.js';
 import { ok, created, badRequest, forbidden, notFound, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
 import { logAudit } from '../utils/auditLogger.js';
+import { getLimits } from '../config/planLimits.js';
 
 const CHANNEL_NAME_RE = /^[a-z0-9-]{1,50}$/;
 
@@ -18,10 +19,9 @@ export async function createChannel(req, res) {
     }
 
     // ── Plan-based chat channel limit ──────────────────────────
-    const CHAT_LIMITS = { free: 2, pro: 4, enterprise: 10 };
     const { data: org } = await supabase.from('organizations').select('plan').eq('id', orgId).single();
-    const orgPlan = org?.plan || 'free';
-    const maxChats = CHAT_LIMITS[orgPlan] ?? 2;
+    const limits = getLimits(org?.plan);
+    const maxChats = limits.chats;
 
     const { count: existingCount } = await supabase
       .from('chat_channels')
@@ -29,7 +29,7 @@ export async function createChannel(req, res) {
       .eq('org_id', orgId);
 
     if ((existingCount ?? 0) >= maxChats) {
-      return forbidden(res, `Chat channel limit reached (${existingCount}/${maxChats} on ${orgPlan} plan). Upgrade to create more channels.`);
+      return forbidden(res, `Chat channel limit reached (${existingCount}/${maxChats} on ${org?.plan || 'free'} plan). Upgrade to create more channels.`);
     }
 
     const { data: channel, error } = await supabase
