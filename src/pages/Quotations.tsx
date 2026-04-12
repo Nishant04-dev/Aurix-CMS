@@ -23,7 +23,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Plus, MoreHorizontal, ArrowRight, Trash2, Send, Lock, Eye, Mail, ExternalLink, Edit2 } from 'lucide-react';
+import { Loader2, Plus, MoreHorizontal, ArrowRight, Trash2, Send, Lock, Eye, Mail, ExternalLink, Edit2, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { DocumentRenderer, type DocumentData } from '@/components/DocumentRenderer';
@@ -49,6 +49,7 @@ export default function Quotations() {
   const qc = useQueryClient();
 
   const canManage = ['admin', 'super_admin', 'manager'].includes(user?.role ?? '');
+  const isClient = user?.role === 'client';
 
   const { data: quotations = [], isLoading } = useQuery({
     queryKey: ['quotations'],
@@ -187,7 +188,12 @@ export default function Quotations() {
                   {q.due_date ? new Date(q.due_date).toLocaleDateString() : '—'}
                 </td>
                 <td className="px-4 py-3">
-                  {canManage && (
+                  {/* Clients get a view/download button; managers get full actions */}
+                  {isClient ? (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPreviewQuotation(q)} title="View / Download">
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  ) : canManage && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-7 w-7">

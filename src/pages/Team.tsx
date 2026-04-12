@@ -54,6 +54,8 @@ export default function Team() {
   const canManage = can('invite_user') || can('edit_user');
 
   const { data: teamMembers, isLoading, refetch } = useTeamMembers();
+  // Belt-and-suspenders: filter clients even if backend returns them
+  const internalMembers = (teamMembers ?? []).filter((m: any) => m.role !== 'client');
   const { data: bannedMembers = [] } = useBannedMembers();
   const updateMember = useUpdateTeamMember();
   const removeMember = useRemoveMember();
@@ -179,7 +181,7 @@ export default function Team() {
 
       <Tabs defaultValue="members">
         <TabsList>
-          <TabsTrigger value="members">Members ({teamMembers?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="members">Members ({internalMembers.length})</TabsTrigger>
           {isAdmin && <TabsTrigger value="banned">Banned ({bannedMembers.length})</TabsTrigger>}
         </TabsList>
 
@@ -197,10 +199,10 @@ export default function Team() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/30">
-                  {(!teamMembers || teamMembers.length === 0) && (
+                  {(!internalMembers || internalMembers.length === 0) && (
                     <tr><td colSpan={4} className="px-6 py-12 text-center text-muted-foreground">No team members found.</td></tr>
                   )}
-                  {teamMembers?.map(member => {
+                  {internalMembers.map(member => {
                     const roleCfg = roleStyles[member.role] || roleStyles.developer;
                     const RoleIcon = roleCfg.icon;
                     const isCurrentUser = member.id === user?.id;

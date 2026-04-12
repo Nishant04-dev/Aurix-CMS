@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProjects, useClients, useApprovalRequests, useCreateApprovalRequest, useUpdateApprovalRequest } from '@/hooks/use-database';
 import { usePermissions } from '@/hooks/use-permissions';
 import { normalizeRole } from '@/lib/accessControl';
+import { useOrgCurrency } from '@/hooks/use-org-currency';
 import { Input } from '@/components/ui/input';
 import { Search, Loader2, Calendar, LayoutGrid, List as ListIcon, MoreHorizontal, ArrowRight, Edit3, Pause, Play, CheckCircle2, XCircle, Clock, FileCheck, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -86,6 +87,7 @@ export default function Projects() {
   const canManage = isAdmin || normalizeRole(user?.role) === 'member';
   const isLocked = (projectStatus: string) => projectStatus === 'completed' || projectStatus === 'approval_pending';
   const { canEditProject, canDeleteProject, canCancelProject, canAssignMembers, can } = usePermissions();
+  const { fmt } = useOrgCurrency();
 
   // Permission-based guards using dynamic can()
   const canCreate  = can('create_project');
@@ -397,12 +399,12 @@ export default function Projects() {
                         <div className="flex flex-col gap-1 min-w-[120px]">
                           <div className="flex justify-between text-[10px] font-bold">
                             <span className="text-muted-foreground">Spent</span>
-                            <span className={cn(budgetRemaining < 0 ? 'text-destructive' : 'text-foreground')}>${p.budget_spent?.toLocaleString()}</span>
+                            <span className={cn(budgetRemaining < 0 ? 'text-destructive' : 'text-foreground')}>{fmt(p.budget_spent)}</span>
                           </div>
                           <Progress value={budgetPercent} className="h-1 w-full bg-muted/50" />
                           <div className="flex justify-between text-[10px] font-bold">
                             <span className="text-muted-foreground">Total</span>
-                            <span className="text-foreground">${p.budget_total?.toLocaleString()}</span>
+                            <span className="text-foreground">{fmt(p.budget_total)}</span>
                           </div>
                         </div>
                       </td>
@@ -451,13 +453,13 @@ export default function Projects() {
                        <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                         <span>Project Budget</span>
                         <span className={cn(budgetRemaining < 0 ? 'text-destructive' : 'text-foreground')}>
-                          ${budgetRemaining.toLocaleString()} Left
+                          {fmt(budgetRemaining)} Left
                         </span>
                       </div>
                       <Progress value={budgetPercent} className="h-1 bg-muted/50" />
                       <div className="flex justify-between text-[11px] font-bold">
-                        <span className="text-muted-foreground/60">${p.budget_spent?.toLocaleString()} spent</span>
-                        <span className="text-foreground">${p.budget_total?.toLocaleString()}</span>
+                        <span className="text-muted-foreground/60">{fmt(p.budget_spent)} spent</span>
+                        <span className="text-foreground">{fmt(p.budget_total)}</span>
                       </div>
                     </div>
 

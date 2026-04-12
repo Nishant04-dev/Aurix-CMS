@@ -284,13 +284,13 @@ export function ProjectFormModal({ onSuccess, initialData, trigger, onApprovalRe
   const [form, setForm] = useState({
     title: initialData?.title || '',
     description: initialData?.description || '',
-    clientId: initialData?.clientId || '',
+    clientId: initialData?.client_id || initialData?.clientId || '',
     status: (initialData?.status || 'pending') as ProjectStatus,
     deadline: initialData?.deadline || '',
     progress: initialData?.progress || 0,
     budget_total: initialData?.budget_total || 0,
     budget_spent: initialData?.budget_spent || 0,
-    memberIds: initialData?.members?.map((m: any) => m.userId) || [] as string[]
+    memberIds: initialData?.members?.map((m: any) => m.userId || m.user_id) || [] as string[]
   });
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -306,13 +306,13 @@ export function ProjectFormModal({ onSuccess, initialData, trigger, onApprovalRe
       setForm({
         title: initialData.title || '',
         description: initialData.description || '',
-        clientId: initialData.clientId || '',
+        clientId: initialData.client_id || initialData.clientId || '',
         status: (initialData.status || 'pending') as ProjectStatus,
         deadline: initialData.deadline || '',
         progress: initialData.progress || 0,
         budget_total: initialData.budget_total || 0,
         budget_spent: initialData.budget_spent || 0,
-        memberIds: initialData?.members?.map((m: any) => m.userId) || []
+        memberIds: initialData?.members?.map((m: any) => m.userId || m.user_id) || []
       });
     }
   }, [open, initialData]);

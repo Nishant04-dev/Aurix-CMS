@@ -16,11 +16,13 @@ export async function getUsers(req, res) {
     if (role === 'client') return forbidden(res, 'Access denied');
 
     // Use memberships table for proper org isolation
+    // Exclude clients — Team page is for internal staff only
     const { data: memberships, error: memErr } = await supabase
       .from('memberships')
       .select('user_id, role')
       .eq('org_id', orgId)
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .neq('role', 'client');
 
     if (memErr) throw memErr;
     if (!memberships?.length) return ok(res, []);
