@@ -95,13 +95,13 @@ async function fetchProfile(token: string) {
 
     return {
       user: {
-        id:        p.id,
-        email:     p.email || '',
-        name:      p.name  || p.email?.split('@')[0] || 'User',
-        role:      (p.role || 'client') as UserRole,
-        avatar:    p.avatar_url,
-        createdAt: p.created_at,
-        ...(p.display_id ? { display_id: p.display_id } : {}),
+        id:         p.id,
+        email:      p.email || '',
+        name:       p.name  || p.email?.split('@')[0] || 'User',
+        role:       (p.role || 'client') as UserRole,
+        avatar:     p.avatar_url,
+        createdAt:  p.created_at,
+        display_id: p.display_id ?? null,
       } as any as User,
       orgId:          p.org_id ?? null,
       orgStatus,

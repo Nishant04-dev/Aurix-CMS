@@ -45,13 +45,33 @@ export default function Files() {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
   const { canUploadFile, limits } = usePlanLimits();
-  const { can: planCan } = usePlan();
+  const { can: planCan, planName } = usePlan();
   const hasFilesAccess = planCan('files');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const canUpload = can('upload_file') && canUploadFile;
   const canDelete = can('delete_file');
   const canView   = can('view_file');
   const isClientUser = user?.role === 'client';
+
+  // ── Full lock screen for plans that don't include files ──────
+  if (!hasFilesAccess) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+        <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center mb-6">
+          <Lock className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <h2 className="text-2xl font-bold text-foreground mb-2">Files — {planName} Plan</h2>
+        <p className="text-muted-foreground max-w-sm mb-6">
+          File uploads and storage are available on Pro and Enterprise plans.
+          Upgrade to start uploading project files.
+        </p>
+        <Button onClick={() => navigate('/settings/billing')} className="gap-2">
+          <Zap className="h-4 w-4" />
+          Upgrade to Pro
+        </Button>
+      </div>
+    );
+  }
   const [search, setSearch] = useState('');
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [localFiles, setLocalFiles] = useState<any[]>([]);

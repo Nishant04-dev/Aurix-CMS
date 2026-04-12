@@ -26,8 +26,8 @@ async function removeFromChannels(userId, orgId) {
 }
 
 /**
- * Deactivate membership and clear profile org_id.
- * Keeps the membership row for audit history.
+ * Deactivate membership (source of truth update).
+ * profile.org_id is cleared as a secondary sync — non-fatal if it fails.
  */
 async function deactivateMembership(userId, orgId, status = 'left') {
   const { error: memErr } = await supabase
@@ -35,15 +35,22 @@ async function deactivateMembership(userId, orgId, status = 'left') {
     .update({ status, updated_at: new Date().toISOString() })
     .eq('user_id', userId)
     .eq('org_id', orgId);
-  if (memErr) logger.warn('deactivateMembership: membership update failed', { err: memErr.message, userId, orgId });
+  if (memErr) {
+    logger.warn('deactivateMembership: membership update failed', { err: memErr.message, userId, orgId });
+    throw new Error(`Failed to deactivate membership: ${memErr.message}`);
+  }
+  logger.info('deactivateMembership: membership deactivated', { userId, orgId, status });
 
-  // Clear profile org_id only if it still points to this org
+  // Secondary: clear profile.org_id only if it still points to this org
+  // Non-fatal — auth middleware derives org from memberships, not profile.org_id
   const { error: profErr } = await supabase
     .from('profiles')
     .update({ org_id: null })
     .eq('id', userId)
     .eq('org_id', orgId);
-  if (profErr) logger.warn('deactivateMembership: profile update failed', { err: profErr.message, userId, orgId });
+  if (profErr) {
+    logger.warn('deactivateMembership: profile org_id sync failed (non-fatal)', { err: profErr.message, userId, orgId });
+  }
 }
 
 // ── Leave Organization ────────────────────────────────────────

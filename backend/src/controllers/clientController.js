@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { supabase } from '../config/supabase.js';
-import { checkLimit } from '../services/permissionService.js';
+import { can } from '../config/accessControl.js';
 import { ok, created, badRequest, forbidden, notFound, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
 
@@ -15,9 +15,7 @@ const ClientSchema = z.object({
 export async function getClients(req, res) {
   try {
     const { orgId, role } = req.user;
-
-    // Clients role cannot list all clients
-    if (role === 'client') return forbidden(res, 'Access denied');
+    if (!can(role, 'clients', 'view')) return forbidden(res, 'Access denied');
 
     const { data, error } = await supabase
       .from('clients')
@@ -35,10 +33,8 @@ export async function getClients(req, res) {
 
 export async function createClient(req, res) {
   try {
-    const { orgId, id: userId } = req.user;
-
-    const limit = await checkLimit(orgId, 'client');
-    if (!limit.allowed) return forbidden(res, limit.reason);
+    const { orgId, id: userId, role } = req.user;
+    if (!can(role, 'clients', 'create')) return forbidden(res, 'Access denied');
 
     const data = ClientSchema.parse(req.body);
 
@@ -70,8 +66,9 @@ export async function createClient(req, res) {
 
 export async function updateClient(req, res) {
   try {
-    const { orgId } = req.user;
+    const { orgId, role } = req.user;
     const { id } = req.params;
+    if (!can(role, 'clients', 'edit')) return forbidden(res, 'Access denied');
 
     const data = ClientSchema.partial().parse(req.body);
 
@@ -101,10 +98,7 @@ export async function deleteClient(req, res) {
   try {
     const { orgId, role } = req.user;
     const { id } = req.params;
-
-    if (!['admin', 'super_admin'].includes(role)) {
-      return forbidden(res, 'Only admins can delete clients');
-    }
+    if (!can(role, 'clients', 'delete')) return forbidden(res, 'Access denied');
 
     const { data: existing } = await supabase
       .from('clients').select('id').eq('id', id).eq('org_id', orgId).single();

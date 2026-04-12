@@ -29,7 +29,16 @@ export async function sendInvitation(req, res) {
 
     if (!target) return badRequest(res, 'User not found. Check the ID and try again.');
     if (target.id === userId) return badRequest(res, 'You cannot invite yourself');
-    if (target.org_id === orgId) return badRequest(res, 'This user is already in your organization');
+
+    // Check if target already has an active membership in this org (source of truth)
+    const { data: existingMembership } = await supabase
+      .from('memberships')
+      .select('id')
+      .eq('user_id', target.id)
+      .eq('org_id', orgId)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (existingMembership) return badRequest(res, 'This user is already in your organization');
 
     // Check for existing pending invite
     const { data: existing } = await supabase
@@ -133,32 +142,43 @@ export async function respondToInvitation(req, res) {
       .from('invitations').update(updateData).eq('id', invitation_id);
     if (updateErr) throw updateErr;
 
-    // On accept: update profile org_id + create membership
+    // On accept: upsert membership FIRST (source of truth), then sync profile.org_id
     if (action === 'accept' && inv.org_id) {
+      // 1. Upsert membership — this is the source of truth
+      const { error: memberErr } = await supabase
+        .from('memberships')
+        .upsert({
+          user_id:    userId,
+          org_id:     inv.org_id,
+          role:       inv.role_name || 'client',
+          status:     'active',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,org_id' });
+      if (memberErr) {
+        logger.error('respondToInvitation: failed to upsert membership', {
+          err: memberErr.message, userId, org_id: inv.org_id,
+        });
+        throw memberErr;
+      }
+      logger.info('Membership upserted (source of truth)', {
+        userId, org_id: inv.org_id, role: inv.role_name,
+      });
+
+      // 2. Sync profile.org_id to match (secondary, for switch-org hint)
       const { error: profileErr } = await supabase
         .from('profiles')
         .update({ org_id: inv.org_id })
         .eq('id', userId);
       if (profileErr) {
-        logger.error('respondToInvitation: failed to update profile org_id', { err: profileErr.message, userId, org_id: inv.org_id });
-        throw profileErr;
+        // Non-fatal: membership is already set, auth middleware will still resolve correctly
+        logger.warn('respondToInvitation: failed to sync profile org_id (non-fatal)', {
+          err: profileErr.message, userId, org_id: inv.org_id,
+        });
+      } else {
+        logger.info('Profile org_id synced after invitation accept', {
+          userId, org_id: inv.org_id,
+        });
       }
-      logger.info('Profile org_id updated', { userId, org_id: inv.org_id });
-
-      const { error: memberErr } = await supabase
-        .from('memberships')
-        .upsert({
-          user_id: userId,
-          org_id:  inv.org_id,
-          role:    inv.role_name || 'client',
-          status:  'active',
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,org_id' });
-      if (memberErr) {
-        logger.error('respondToInvitation: failed to upsert membership', { err: memberErr.message, userId, org_id: inv.org_id });
-        throw memberErr;
-      }
-      logger.info('Membership upserted', { userId, org_id: inv.org_id, role: inv.role_name });
     }
 
     const auditAction = action === 'accept' ? 'invite.accepted' : 'invite.rejected';

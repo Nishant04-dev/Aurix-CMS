@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { fileQueue } from '../queue/queues.js';
-import { checkLimit } from '../services/permissionService.js';
 import { supabase } from '../config/supabase.js';
+import { getLimits } from '../config/planLimits.js';
+import { can } from '../config/accessControl.js';
 import { ok, created, badRequest, forbidden, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
 
@@ -15,10 +16,19 @@ const RegisterFileSchema = z.object({
 
 export async function registerFile(req, res) {
   try {
-    const { orgId, id: userId } = req.user;
+    const { orgId, id: userId, role } = req.user;
 
-    const limit = await checkLimit(orgId, 'file');
-    if (!limit.allowed) return forbidden(res, limit.reason);
+    // Role check
+    if (!can(role, 'files', 'upload')) {
+      return forbidden(res, 'Access denied');
+    }
+
+    // Plan check — files feature must be enabled
+    const { data: org } = await supabase.from('organizations').select('plan').eq('id', orgId).single();
+    const limits = getLimits(org?.plan);
+    if (!limits.files) {
+      return forbidden(res, `File uploads require a Pro or Enterprise plan. Current plan: ${org?.plan || 'free'}.`);
+    }
 
     const data = RegisterFileSchema.parse(req.body);
 
@@ -47,8 +57,8 @@ export async function deleteFile(req, res) {
     const { orgId, id: userId, role } = req.user;
     const { file_id } = req.params;
 
-    if (!['admin', 'super_admin', 'manager'].includes(role)) {
-      return forbidden(res, 'Only admins can delete files');
+    if (!can(role, 'files', 'delete')) {
+      return forbidden(res, 'Access denied');
     }
 
     const { data: file } = await supabase
