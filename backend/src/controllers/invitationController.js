@@ -135,13 +135,29 @@ export async function respondToInvitation(req, res) {
 
     // On accept: update profile org_id + create membership
     if (action === 'accept' && inv.org_id) {
-      await supabase.from('profiles').update({ org_id: inv.org_id }).eq('id', userId);
-      await supabase.from('memberships').upsert({
-        user_id: userId,
-        org_id:  inv.org_id,
-        role:    inv.role_name || 'client',
-        status:  'active',
-      }, { onConflict: 'user_id,org_id' });
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .update({ org_id: inv.org_id })
+        .eq('id', userId);
+      if (profileErr) {
+        logger.error('respondToInvitation: failed to update profile org_id', { err: profileErr.message, userId, org_id: inv.org_id });
+        throw profileErr;
+      }
+
+      const { error: memberErr } = await supabase
+        .from('memberships')
+        .upsert({
+          user_id: userId,
+          org_id:  inv.org_id,
+          role:    inv.role_name || 'client',
+          status:  'active',
+        }, { onConflict: 'user_id,org_id' });
+      if (memberErr) {
+        logger.error('respondToInvitation: failed to upsert membership', { err: memberErr.message, userId, org_id: inv.org_id });
+        throw memberErr;
+      }
+
+      logger.info('Invitation accepted — profile + membership updated', { userId, org_id: inv.org_id, role: inv.role_name });
     }
 
     const auditAction = action === 'accept' ? 'invite.accepted' : 'invite.rejected';
@@ -151,7 +167,11 @@ export async function respondToInvitation(req, res) {
       ? 'You have joined the organization!'
       : 'Invitation declined';
 
-    return ok(res, { message }, message);
+    return ok(res, {
+      success: true,
+      message,
+      org_id: action === 'accept' ? inv.org_id : null,
+    }, message);
   } catch (err) {
     logger.error('respondToInvitation error', { err: err.message });
     return serverError(res, err.message);

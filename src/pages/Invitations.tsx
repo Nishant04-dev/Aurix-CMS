@@ -87,11 +87,11 @@ export default function Invitations() {
       const data = await api.post<any>('/invitations/respond', { invitation_id: id, action: 'accept' });
       toast({ title: '🎉 Welcome!', description: data?.message || 'You joined the organization.' });
       logAudit({ orgId: null, userId: user?.id, action: 'INVITE_ACCEPTED', entity: 'invitation', entityId: id });
+      // Refresh auth context then hard-reload so the new org is fully loaded
       await refreshUser();
-      await loadReceived();
+      window.location.href = '/';
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error', description: err.message });
-    } finally {
       setActionId(null);
     }
   };
