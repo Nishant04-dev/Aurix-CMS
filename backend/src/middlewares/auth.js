@@ -1,6 +1,7 @@
 import { supabase } from '../config/supabase.js';
 import { unauthorized, forbidden } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
+import { normalizeRole, ROLE_POWER } from '../config/accessControl.js';
 
 export async function authenticate(req, res, next) {
   try {
@@ -51,7 +52,6 @@ export async function authenticate(req, res, next) {
         .order('updated_at', { ascending: false });
 
       if (allMems?.length) {
-        const ROLE_POWER = { super_admin: 100, superadmin: 100, admin: 90, manager: 70, member: 50, client: 10 };
         const withPower = allMems.map(m => ({ ...m, power: ROLE_POWER[m.role?.toLowerCase()] ?? 10 }));
 
         // Prefer profile.org_id if it has a high-power role (admin+)
@@ -225,10 +225,11 @@ export function requireOrg(req, res, next) {
 export function requireRole(...roles) {
   return (req, res, next) => {
     if (req.user?.isPlatformOwner) return next();
-    if (!roles.includes(req.user?.role)) {
-      return forbidden(res, `Required role: ${roles.join(' or ')}`);
-    }
-    next();
+    const userRole = req.user?.role;
+    const normalized = normalizeRole(userRole);
+    // Accept both the raw role and the normalized canonical role
+    if (roles.includes(userRole) || roles.includes(normalized)) return next();
+    return forbidden(res, `Required role: ${roles.join(' or ')}`);
   };
 }
 
@@ -280,6 +281,9 @@ export function requirePermission(permKey) {
       const { roleId, role, isPlatformOwner, orgId, id: userId } = req.user;
 
       if (isPlatformOwner || role === 'super_admin' || role === 'admin') return next();
+      // Also pass normalized role (manager/developer/support → member doesn't get auto-pass here)
+      const normalized = normalizeRole(role);
+      if (normalized === 'super_admin' || normalized === 'admin') return next();
 
       if (!roleId) {
         return forbidden(res, `Permission denied: ${permKey}`);

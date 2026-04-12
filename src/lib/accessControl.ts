@@ -1,31 +1,70 @@
 /**
- * Frontend access control matrix — mirrors backend/src/config/accessControl.js.
- * SOURCE OF TRUTH for role-based UI visibility and feature gating.
+ * Frontend access control — SINGLE SOURCE OF TRUTH.
+ * Mirrors backend/src/config/accessControl.js exactly.
  *
- * Roles: super_admin | admin | manager | developer | support | client
- * Plans: free | pro | enterprise  (enforced via usePlan hook)
+ * Internal role values (from memberships / profiles):
+ *   super_admin → displayed as "Owner"
+ *   admin       → displayed as "Admin"
+ *   member      → displayed as "Member"  (covers manager/developer/support/staff)
+ *   client      → displayed as "Client"
  */
 
-type Role = 'super_admin' | 'admin' | 'manager' | 'developer' | 'support' | 'client';
+export const ROLE_LABELS: Record<string, string> = {
+  super_admin: 'Owner',
+  admin:       'Admin',
+  member:      'Member',
+  manager:     'Member',
+  developer:   'Member',
+  support:     'Member',
+  staff:       'Member',
+  client:      'Client',
+};
 
-const ACCESS = {
-  clients:    { view: ['super_admin','admin','manager'] as Role[] },
-  team:       { view: ['super_admin','admin','manager'] as Role[] },
-  roles:      { view: ['super_admin','admin'] as Role[] },
-  invoices:   { view: ['super_admin','admin','manager','client'] as Role[] },
-  quotations: { view: ['super_admin','admin','manager','client'] as Role[] },
-  files:      { view: ['super_admin','admin','manager','developer','support'] as Role[] },
-  chat:       { view: ['super_admin','admin','manager','developer','support','client'] as Role[] },
-  audit_logs: { view: ['super_admin','admin'] as Role[] },
-  projects:   { view: ['super_admin','admin','manager','developer','support'] as Role[] },
-  tasks:      { view: ['super_admin','admin','manager','developer','support'] as Role[] },
-  settings:   { view: ['super_admin','admin'] as Role[] },
-} as const;
+export const ROLE_POWER: Record<string, number> = {
+  super_admin: 100,
+  admin:       90,
+  manager:     70,
+  member:      50,
+  developer:   50,
+  support:     50,
+  staff:       40,
+  client:      10,
+  inactive:    0,
+};
 
-export function canAccess(role: string, resource: keyof typeof ACCESS, action: 'view' = 'view'): boolean {
-  const allowed = ACCESS[resource]?.[action] as readonly string[] | undefined;
-  if (!allowed) return false;
-  return allowed.includes(role);
+/** Normalize any role to one of the 4 canonical roles. */
+export function normalizeRole(role: string | undefined | null): 'super_admin' | 'admin' | 'member' | 'client' {
+  if (!role) return 'client';
+  const r = role.toLowerCase();
+  if (r === 'super_admin' || r === 'superadmin') return 'super_admin';
+  if (r === 'admin') return 'admin';
+  if (r === 'client') return 'client';
+  return 'member';
 }
 
-export type { Role };
+const ACCESS = {
+  clients:    { view: ['super_admin', 'admin', 'member'] },
+  team:       { view: ['super_admin', 'admin', 'member'] },
+  roles:      { view: ['super_admin', 'admin'] },
+  invoices:   { view: ['super_admin', 'admin', 'member', 'client'] },
+  quotations: { view: ['super_admin', 'admin', 'member', 'client'] },
+  files:      { view: ['super_admin', 'admin', 'member'] },
+  chat:       { view: ['super_admin', 'admin', 'member', 'client'] },
+  audit_logs: { view: ['super_admin', 'admin'] },
+  projects:   { view: ['super_admin', 'admin', 'member'] },
+  tasks:      { view: ['super_admin', 'admin', 'member'] },
+  settings:   { view: ['super_admin', 'admin'] },
+} as const;
+
+export type AccessResource = keyof typeof ACCESS;
+
+/**
+ * Check if a role can access a resource.
+ * Automatically normalizes legacy role aliases (manager/developer/support → member).
+ */
+export function canAccess(role: string | undefined | null, resource: AccessResource, action: 'view' = 'view'): boolean {
+  const normalized = normalizeRole(role);
+  const allowed = ACCESS[resource]?.[action] as readonly string[] | undefined;
+  if (!allowed) return false;
+  return allowed.includes(normalized);
+}

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';import { useAuth } from '@/contexts/AuthContext';
+import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { usePlan } from '@/hooks/use-plan';
 import { useOrgSettings } from '@/hooks/use-org-settings';
 import { OrgSwitcher } from '@/components/OrgSwitcher';
+import { canAccess, ROLE_LABELS, normalizeRole } from '@/lib/accessControl';
 import type { FeatureKey } from '@/lib/plans';
 import {
   LayoutDashboard, Users, FolderKanban, CheckSquare, MessageSquare,
@@ -13,27 +15,28 @@ import { cn } from '@/lib/utils';
 import NotificationsPanel from '@/components/NotificationsPanel';
 import { Button } from './ui/button';
 
-// Nav items — planFeature gates visibility by subscription plan
-// roleAccess: which roles can see this item. null = everyone with an org.
+// Nav items — roleAccess uses canonical roles (super_admin/admin/member/client).
+// null = visible to all authenticated users with an org.
+// planFeature = show locked icon if plan doesn't include it (never hide).
 const NAV_ITEMS = [
-  { label: 'Dashboard',  icon: LayoutDashboard, path: '/',                  planFeature: null,                          roleAccess: null },
-  { label: 'Clients',    icon: Users,            path: '/clients',           planFeature: 'clients_limited' as FeatureKey, roleAccess: ['super_admin','admin','manager'] },
-  { label: 'Projects',   icon: FolderKanban,     path: '/projects',          planFeature: null,                          roleAccess: ['super_admin','admin','manager','developer','support'] },
-  { label: 'Tasks',      icon: CheckSquare,      path: '/tasks',             planFeature: null,                          roleAccess: ['super_admin','admin','manager','developer','support'] },
-  { label: 'Messages',   icon: MessageSquare,    path: '/messages',          planFeature: null,                          roleAccess: null },
-  { label: 'Invoices',   icon: CreditCard,       path: '/invoices',          planFeature: 'invoices_basic' as FeatureKey, roleAccess: null },
-  { label: 'Quotations', icon: FileText,         path: '/quotations',        planFeature: null,                          roleAccess: ['super_admin','admin','manager','client'] },
-  { label: 'Files',      icon: FileText,         path: '/files',             planFeature: 'files' as FeatureKey,         roleAccess: ['super_admin','admin','manager','developer','support'] },
-  { label: 'Team',       icon: UserCog,          path: '/team',              planFeature: 'team_limited' as FeatureKey,  roleAccess: ['super_admin','admin','manager'] },
-  { label: 'Roles',      icon: ShieldCheck,      path: '/roles',             planFeature: null,                          roleAccess: ['super_admin','admin'] },
-  { label: 'Invitations',icon: Mail,             path: '/invitations',       planFeature: null,                          roleAccess: null },
-  { label: 'Team Chat',  icon: Hash,             path: '/org/chat',          planFeature: 'team_chat' as FeatureKey,     roleAccess: null },
+  { label: 'Dashboard',  icon: LayoutDashboard, path: '/',                  planFeature: null,                            roleAccess: null },
+  { label: 'Clients',    icon: Users,            path: '/clients',           planFeature: 'clients_limited' as FeatureKey, roleAccess: ['super_admin','admin','member'] },
+  { label: 'Projects',   icon: FolderKanban,     path: '/projects',          planFeature: null,                            roleAccess: ['super_admin','admin','member'] },
+  { label: 'Tasks',      icon: CheckSquare,      path: '/tasks',             planFeature: null,                            roleAccess: ['super_admin','admin','member'] },
+  { label: 'Messages',   icon: MessageSquare,    path: '/messages',          planFeature: null,                            roleAccess: null },
+  { label: 'Invoices',   icon: CreditCard,       path: '/invoices',          planFeature: 'invoices_basic' as FeatureKey,  roleAccess: null },
+  { label: 'Quotations', icon: FileText,         path: '/quotations',        planFeature: null,                            roleAccess: ['super_admin','admin','member','client'] },
+  { label: 'Files',      icon: FileText,         path: '/files',             planFeature: 'files' as FeatureKey,           roleAccess: ['super_admin','admin','member'] },
+  { label: 'Team',       icon: UserCog,          path: '/team',              planFeature: 'team_limited' as FeatureKey,    roleAccess: ['super_admin','admin','member'] },
+  { label: 'Roles',      icon: ShieldCheck,      path: '/roles',             planFeature: null,                            roleAccess: ['super_admin','admin'] },
+  { label: 'Invitations',icon: Mail,             path: '/invitations',       planFeature: null,                            roleAccess: null },
+  { label: 'Team Chat',  icon: Hash,             path: '/org/chat',          planFeature: 'team_chat' as FeatureKey,       roleAccess: null },
   { label: 'Audit Logs', icon: ClipboardList,    path: '/org/audit-logs',    planFeature: 'audit_logs_limited' as FeatureKey, roleAccess: ['super_admin','admin'] },
-  { label: 'Platform',   icon: Globe,            path: '/platform/overview', planFeature: null,                          roleAccess: null, platformOwnerOnly: true },
-  { label: 'Settings',   icon: Settings,         path: '/settings',          planFeature: null,                          roleAccess: ['super_admin','admin'] },
-  { label: 'Billing',    icon: CreditCard,       path: '/settings/billing',  planFeature: null,                          roleAccess: ['super_admin','admin'], businessOnly: true },
-  { label: 'Profile',    icon: UserIcon,         path: '/profile',           planFeature: null,                          roleAccess: null },
-  { label: 'Support',    icon: MessageSquare,    path: '/support',           planFeature: null,                          roleAccess: null },
+  { label: 'Platform',   icon: Globe,            path: '/platform/overview', planFeature: null,                            roleAccess: null, platformOwnerOnly: true },
+  { label: 'Settings',   icon: Settings,         path: '/settings',          planFeature: null,                            roleAccess: ['super_admin','admin'] },
+  { label: 'Billing',    icon: CreditCard,       path: '/settings/billing',  planFeature: null,                            roleAccess: ['super_admin','admin'], businessOnly: true },
+  { label: 'Profile',    icon: UserIcon,         path: '/profile',           planFeature: null,                            roleAccess: null },
+  { label: 'Support',    icon: MessageSquare,    path: '/support',           planFeature: null,                            roleAccess: null },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -47,18 +50,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   const role = user?.role ?? 'client';
-  const isOwner  = role === 'admin' || role === 'super_admin';
-  const isClient = role === 'client';
+  const normalized = normalizeRole(role);
+  const isOwner  = normalized === 'super_admin' || isPlatformOwner;
+  const isClient = normalized === 'client';
 
-  // Filter nav items using the centralized role + plan matrix
+  // Filter nav items using the centralized access matrix
   const nav = NAV_ITEMS.filter(item => {
-    // Platform owner only
     if ((item as any).platformOwnerOnly && !isPlatformOwner) return false;
-    // Business account only (billing)
     if ((item as any).businessOnly && accountType !== 'business') return false;
-    // Role access check — null means all roles with an org can see it
-    if (item.roleAccess && !item.roleAccess.includes(role) && !isPlatformOwner) return false;
-    // Plan-gated items: always show (render locked state inline), never hide
+    // roleAccess: null = visible to all authenticated users
+    if (item.roleAccess && !isPlatformOwner) {
+      // Check if any of the item's allowed roles match the normalized role
+      const allowed = item.roleAccess as string[];
+      if (!allowed.includes(normalized)) return false;
+    }
     return true;
   });
 
@@ -146,16 +151,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <div className="text-sm font-semibold truncate text-foreground">{user.name}</div>
               <div className="text-[11px] text-muted-foreground truncate">{user.email}</div>
               <div className="mt-1 inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary capitalize">
-                {isPlatformOwner || role === 'super_admin' ? 'Owner'
-                  : role === 'admin'     ? 'Admin'
-                  : role === 'manager'   ? 'Manager'
-                  : role === 'developer' ? 'Developer'
-                  : role === 'support'   ? 'Support'
-                  : role === 'client'    ? 'Client'
-                  : 'Member'
-                }
+                {ROLE_LABELS[role] ?? 'Member'}
               </div>
-              {/* Plan badge — only visible to org owners, not clients or team members */}
+              {/* Plan badge — only visible to owners/admins */}
               {isOwner && (
                 <div className="mt-1 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 uppercase tracking-wider">
                   {planName}
@@ -163,7 +161,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               )}
             </div>
           )}
-          {/* Upgrade CTA — only for business owners on free/pro plans */}
+          {/* Upgrade CTA — only for owners/admins on free/pro plans */}
           {!collapsed && accountType === 'business' && isOwner && planName !== 'Enterprise' && (
             <Link
               to="/settings/billing"

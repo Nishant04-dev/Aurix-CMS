@@ -3,6 +3,7 @@ import { ok, created, badRequest, forbidden, notFound, serverError } from '../ut
 import { logger } from '../utils/logger.js';
 import { logAudit } from '../utils/auditLogger.js';
 import { getLimits } from '../config/planLimits.js';
+import { can } from '../config/accessControl.js';
 
 const CHANNEL_NAME_RE = /^[a-z0-9-]{1,50}$/;
 
@@ -11,7 +12,7 @@ const CHANNEL_NAME_RE = /^[a-z0-9-]{1,50}$/;
 export async function createChannel(req, res) {
   try {
     const { id: userId, orgId, role } = req.user;
-    if (!['admin', 'super_admin'].includes(role)) return forbidden(res, 'Only admins can create channels');
+    if (!can(role, 'chat', 'create_channel')) return forbidden(res, 'Only owners and admins can create channels');
 
     const { name } = req.body;
     if (!name || !CHANNEL_NAME_RE.test(name)) {
@@ -57,7 +58,7 @@ export async function createChannel(req, res) {
 export async function deleteChannel(req, res) {
   try {
     const { id: userId, orgId, role } = req.user;
-    if (!['admin', 'super_admin'].includes(role)) return forbidden(res, 'Only admins can delete channels');
+    if (!can(role, 'chat', 'delete_channel')) return forbidden(res, 'Only owners and admins can delete channels');
 
     const { channelId } = req.params;
     const { data: ch } = await supabase.from('chat_channels').select('id, org_id, name').eq('id', channelId).maybeSingle();
@@ -77,7 +78,7 @@ export async function deleteChannel(req, res) {
 export async function addChannelMember(req, res) {
   try {
     const { id: userId, orgId, role } = req.user;
-    if (!['admin', 'super_admin'].includes(role)) return forbidden(res, 'Only admins can add channel members');
+    if (!can(role, 'chat', 'create_channel')) return forbidden(res, 'Only owners and admins can add channel members');
 
     const { channelId } = req.params;
     const { user_id: targetUserId } = req.body;
@@ -106,7 +107,7 @@ export async function addChannelMember(req, res) {
 export async function removeChannelMember(req, res) {
   try {
     const { id: userId, orgId, role } = req.user;
-    if (!['admin', 'super_admin'].includes(role)) return forbidden(res, 'Only admins can remove channel members');
+    if (!can(role, 'chat', 'delete_channel')) return forbidden(res, 'Only owners and admins can remove channel members');
 
     const { channelId, memberId } = req.params;
     const { data: ch } = await supabase.from('chat_channels').select('id, org_id').eq('id', channelId).maybeSingle();

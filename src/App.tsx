@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/use-permissions";
+import { canAccess, normalizeRole } from "@/lib/accessControl";
 import AppLayout from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import Clients from "@/pages/Clients";
@@ -51,7 +52,8 @@ const queryClient = new QueryClient({
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  if (!['admin', 'super_admin'].includes(user?.role ?? '')) return <Navigate to="/" replace />;
+  const n = normalizeRole(user?.role);
+  if (n !== 'super_admin' && n !== 'admin') return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -80,7 +82,10 @@ function UnknownRoleGate({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   const { user, orgId, orgStatus, isPlatformOwner, accountType, loading } = useAuth();
-  const { can, isAdmin, isClient: isClientRole } = usePermissions();
+  const { can, isClient: isClientRole } = usePermissions();
+  const role = user?.role ?? 'client';
+  const normalized = normalizeRole(role);
+  const isOwner = normalized === 'super_admin' || isPlatformOwner;
 
   // Show spinner while auth is initializing
   if (loading) {
@@ -97,36 +102,34 @@ function AppRoutes() {
   if (!user) return <Login />;
 
   // Only business users without an org need onboarding
-  // Never send platform owner or super_admin to onboarding
-  if (!isPlatformOwner && user.role !== 'super_admin' && accountType === 'business' && !orgId) return <Onboarding />;
+  if (!isPlatformOwner && normalized !== 'super_admin' && accountType === 'business' && !orgId) return <Onboarding />;
 
   // Business users with an org that isn't approved yet → waiting page
-  // Never block super_admin or platform owner
-  if (accountType === 'business' && orgId && !isPlatformOwner && user.role !== 'super_admin' && orgStatus !== 'approved') return <WaitingApproval />;
+  if (accountType === 'business' && orgId && !isPlatformOwner && normalized !== 'super_admin' && orgStatus !== 'approved') return <WaitingApproval />;
 
   return (
     <AppLayout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
 
-        {/* Permission-gated routes */}
-        <Route path="/clients"  element={<UnknownRoleGate>{can('view_client')   ? <Clients />  : <Navigate to="/" replace />}</UnknownRoleGate>} />
-        <Route path="/team"     element={<UnknownRoleGate>{can('invite_user')   ? <Team />     : <Navigate to="/" replace />}</UnknownRoleGate>} />
-        <Route path="/roles"    element={<UnknownRoleGate>{can('manage_roles')  ? <Roles />    : <Navigate to="/" replace />}</UnknownRoleGate>} />
-        <Route path="/projects" element={<UnknownRoleGate>{isClientRole || can('view_project')  ? <Projects /> : <Navigate to="/" replace />}</UnknownRoleGate>} />
-        <Route path="/tasks"    element={<UnknownRoleGate>{isClientRole || can('view_project')  ? <Tasks />    : <Navigate to="/" replace />}</UnknownRoleGate>} />
-        <Route path="/invoices" element={<UnknownRoleGate>{isClientRole || can('view_invoices') ? <Invoices /> : <Navigate to="/" replace />}</UnknownRoleGate>} />
-        <Route path="/messages" element={<UnknownRoleGate>{isClientRole || can('view_project')  ? <Messages /> : <Navigate to="/" replace />}</UnknownRoleGate>} />
-        <Route path="/files"    element={<UnknownRoleGate>{isClientRole || can('view_file')     ? <Files />    : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        {/* Permission-gated routes — use canAccess for structural role checks */}
+        <Route path="/clients"  element={<UnknownRoleGate>{canAccess(role,'clients')   ? <Clients />  : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/team"     element={<UnknownRoleGate>{canAccess(role,'team')      ? <Team />     : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/roles"    element={<UnknownRoleGate>{canAccess(role,'roles')     ? <Roles />    : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/projects" element={<UnknownRoleGate>{canAccess(role,'projects')  ? <Projects /> : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/tasks"    element={<UnknownRoleGate>{canAccess(role,'tasks')     ? <Tasks />    : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/invoices" element={<UnknownRoleGate>{canAccess(role,'invoices')  ? <Invoices /> : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/messages" element={<UnknownRoleGate>{<Messages />}</UnknownRoleGate>} />
+        <Route path="/files"    element={<UnknownRoleGate>{canAccess(role,'files')     ? <Files />    : <Navigate to="/" replace />}</UnknownRoleGate>} />
+        <Route path="/quotations" element={<UnknownRoleGate>{canAccess(role,'quotations') ? <Quotations /> : <Navigate to="/" replace />}</UnknownRoleGate>} />
 
         <Route path="/profile" element={<Profile />} />
-        <Route path="/settings" element={isClientRole ? <Navigate to="/" replace /> : <Settings />} />
+        <Route path="/settings" element={canAccess(role,'settings') ? <Settings /> : <Navigate to="/" replace />} />
         <Route path="/invitations" element={<Invitations />} />
-        <Route path="/quotations"  element={<UnknownRoleGate>{isClientRole || can('view_invoices') ? <Quotations /> : <Navigate to="/" replace />}</UnknownRoleGate>} />
         <Route path="/support" element={<Support />} />
         <Route path="/org/audit-logs" element={<RequireAdmin><AuditLogs /></RequireAdmin>} />
         <Route path="/org/chat" element={<Chat />} />
-        <Route path="/settings/billing" element={(isAdmin || isPlatformOwner) ? <Billing /> : <Navigate to="/" replace />} />
+        <Route path="/settings/billing" element={(isOwner || isPlatformOwner) ? <Billing /> : <Navigate to="/" replace />} />
 
         {/* Platform routes — wrapped in PlatformLayout */}
         <Route path="/platform" element={isPlatformOwner ? <Navigate to="/platform/overview" replace /> : <Navigate to="/" replace />} />

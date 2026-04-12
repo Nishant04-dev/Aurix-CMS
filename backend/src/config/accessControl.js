@@ -1,118 +1,145 @@
 /**
- * Central access control matrix.
- * SOURCE OF TRUTH for role-based feature access.
+ * Central access control matrix — SINGLE SOURCE OF TRUTH.
  *
- * Roles (from memberships table):
- *   super_admin — org owner, full access
- *   admin       — org admin, manages everything except ownership transfer
- *   manager     — internal team lead, limited admin
- *   developer   — internal team member (technical)
- *   support     — internal team member (non-technical)
+ * Internal role values (stored in memberships table):
+ *   super_admin — org owner / platform owner (displayed as "Owner")
+ *   admin       — org administrator (displayed as "Admin")
+ *   member      — internal team member: developer, support, manager, staff
+ *                 (any role with power_level 40–70 maps here)
  *   client      — external client, sees only their own data
  *
+ * Aliases accepted everywhere (legacy / custom org roles):
+ *   manager, developer, support, staff → treated as 'member'
+ *
  * Plan limits are enforced separately via planLimits.js.
- * This file only governs ROLE-based access.
  */
 
-export const ACCESS = {
-  // ── Client management ──────────────────────────────────────
+// Canonical roles
+export const ROLES = {
+  OWNER:  'super_admin',
+  ADMIN:  'admin',
+  MEMBER: 'member',
+  CLIENT: 'client',
+};
+
+// Display labels for UI
+export const ROLE_LABELS = {
+  super_admin: 'Owner',
+  admin:       'Admin',
+  member:      'Member',
+  // legacy aliases — same display
+  manager:     'Member',
+  developer:   'Member',
+  support:     'Member',
+  staff:       'Member',
+  client:      'Client',
+};
+
+// Power levels — used for hierarchy enforcement
+export const ROLE_POWER = {
+  super_admin: 100,
+  admin:       90,
+  manager:     70,
+  member:      50,
+  developer:   50,
+  support:     50,
+  staff:       40,
+  client:      10,
+  inactive:    0,
+};
+
+/**
+ * Normalize any role string to one of the 4 canonical roles.
+ * manager/developer/support/staff all become 'member'.
+ */
+export function normalizeRole(role) {
+  if (!role) return 'client';
+  const r = role.toLowerCase();
+  if (r === 'super_admin' || r === 'superadmin') return 'super_admin';
+  if (r === 'admin') return 'admin';
+  if (r === 'client') return 'client';
+  // Everything in the middle is a member
+  return 'member';
+}
+
+// ── Access matrix ─────────────────────────────────────────────
+// Uses canonical roles. normalizeRole() is called before checking.
+const ACCESS = {
   clients: {
-    view:   ['super_admin', 'admin', 'manager'],
-    create: ['super_admin', 'admin', 'manager'],
-    edit:   ['super_admin', 'admin', 'manager'],
+    view:   ['super_admin', 'admin', 'member'],
+    create: ['super_admin', 'admin', 'member'],
+    edit:   ['super_admin', 'admin', 'member'],
     delete: ['super_admin', 'admin'],
   },
-
-  // ── Team / user management ─────────────────────────────────
   team: {
-    view:   ['super_admin', 'admin', 'manager'],
-    invite: ['super_admin', 'admin', 'manager'],
+    view:   ['super_admin', 'admin', 'member'],
+    invite: ['super_admin', 'admin', 'member'],
     remove: ['super_admin', 'admin'],
     ban:    ['super_admin', 'admin'],
   },
-
-  // ── Role management ────────────────────────────────────────
   roles: {
     view:   ['super_admin', 'admin'],
     create: ['super_admin', 'admin'],
     edit:   ['super_admin', 'admin'],
     delete: ['super_admin', 'admin'],
   },
-
-  // ── Invoices ───────────────────────────────────────────────
-  // Clients see only their own (filtered in controller)
   invoices: {
-    view:   ['super_admin', 'admin', 'manager', 'client'],
-    create: ['super_admin', 'admin', 'manager'],
-    edit:   ['super_admin', 'admin', 'manager'],
+    view:   ['super_admin', 'admin', 'member', 'client'],
+    create: ['super_admin', 'admin', 'member'],
+    edit:   ['super_admin', 'admin', 'member'],
     delete: ['super_admin', 'admin'],
   },
-
-  // ── Quotations ─────────────────────────────────────────────
-  // Clients see only their own (filtered in controller)
   quotations: {
-    view:    ['super_admin', 'admin', 'manager', 'client'],
-    create:  ['super_admin', 'admin', 'manager'],
-    edit:    ['super_admin', 'admin', 'manager'],
+    view:    ['super_admin', 'admin', 'member', 'client'],
+    create:  ['super_admin', 'admin', 'member'],
+    edit:    ['super_admin', 'admin', 'member'],
     delete:  ['super_admin', 'admin'],
-    convert: ['super_admin', 'admin', 'manager'],
+    convert: ['super_admin', 'admin', 'member'],
   },
-
-  // ── Files ──────────────────────────────────────────────────
-  // Also gated by plan (files: true/false in planLimits)
   files: {
-    view:   ['super_admin', 'admin', 'manager', 'developer', 'support'],
-    upload: ['super_admin', 'admin', 'manager', 'developer', 'support'],
-    delete: ['super_admin', 'admin', 'manager'],
+    view:   ['super_admin', 'admin', 'member'],
+    upload: ['super_admin', 'admin', 'member'],
+    delete: ['super_admin', 'admin'],
   },
-
-  // ── Chat channels ──────────────────────────────────────────
-  // Also gated by plan (chats limit in planLimits)
   chat: {
-    view:           ['super_admin', 'admin', 'manager', 'developer', 'support', 'client'],
+    view:           ['super_admin', 'admin', 'member', 'client'],
     create_channel: ['super_admin', 'admin'],
     delete_channel: ['super_admin', 'admin'],
-    send_message:   ['super_admin', 'admin', 'manager', 'developer', 'support', 'client'],
+    send_message:   ['super_admin', 'admin', 'member', 'client'],
   },
-
-  // ── Audit logs ─────────────────────────────────────────────
-  // Also gated by plan (audit_days in planLimits)
   audit_logs: {
     view: ['super_admin', 'admin'],
   },
-
-  // ── Projects ───────────────────────────────────────────────
   projects: {
-    view:   ['super_admin', 'admin', 'manager', 'developer', 'support'],
-    create: ['super_admin', 'admin', 'manager'],
-    edit:   ['super_admin', 'admin', 'manager'],
+    view:   ['super_admin', 'admin', 'member'],
+    create: ['super_admin', 'admin', 'member'],
+    edit:   ['super_admin', 'admin', 'member'],
     delete: ['super_admin', 'admin'],
   },
-
-  // ── Tasks ──────────────────────────────────────────────────
   tasks: {
-    view:   ['super_admin', 'admin', 'manager', 'developer', 'support'],
-    create: ['super_admin', 'admin', 'manager', 'developer', 'support'],
-    edit:   ['super_admin', 'admin', 'manager', 'developer', 'support'],
-    delete: ['super_admin', 'admin', 'manager'],
+    view:   ['super_admin', 'admin', 'member'],
+    create: ['super_admin', 'admin', 'member'],
+    edit:   ['super_admin', 'admin', 'member'],
+    delete: ['super_admin', 'admin'],
   },
-
-  // ── Org settings ───────────────────────────────────────────
   settings: {
-    view:   ['super_admin', 'admin'],
-    edit:   ['super_admin', 'admin'],
+    view: ['super_admin', 'admin'],
+    edit: ['super_admin', 'admin'],
   },
 };
 
 /**
  * Check if a role has access to a resource action.
- * @param {string} role - The user's role
- * @param {string} resource - Key from ACCESS (e.g. 'clients')
- * @param {string} action - Action key (e.g. 'view')
+ * Automatically normalizes legacy role aliases.
+ *
+ * @param {string} role
+ * @param {string} resource
+ * @param {string} action
  * @returns {boolean}
  */
 export function can(role, resource, action) {
+  const normalized = normalizeRole(role);
   const allowed = ACCESS[resource]?.[action];
   if (!allowed) return false;
-  return allowed.includes(role);
+  return allowed.includes(normalized);
 }
