@@ -34,14 +34,26 @@ export async function getFiles(req, res) {
       .eq('org_id', orgId)
       .order('created_at', { ascending: false });
 
-    // Clients only see files for their projects
+    // Clients only see files for their projects — dual-path lookup
     if (normalizeRole(role) === 'client') {
+      const projectIds = new Set();
+
       const { data: client } = await supabase
-        .from('clients').select('id').eq('user_id', userId).eq('org_id', orgId).single();
-      if (!client) return ok(res, []);
-      const { data: projects } = await supabase
-        .from('projects').select('id').eq('client_id', client.id).eq('org_id', orgId);
-      const ids = (projects || []).map(p => p.id);
+        .from('clients').select('id').eq('user_id', userId).eq('org_id', orgId).maybeSingle();
+
+      if (client) {
+        const { data: clientProjects } = await supabase
+          .from('projects').select('id').eq('client_id', client.id).eq('org_id', orgId);
+        (clientProjects || []).forEach(p => projectIds.add(p.id));
+      }
+
+      const { data: memberProjects } = await supabase
+        .from('project_members').select('project_id').eq('user_id', userId);
+      (memberProjects || []).forEach(p => projectIds.add(p.project_id));
+
+      const ids = [...projectIds];
+      logger.info('getFiles: client project lookup', { userId, orgId, clientId: client?.id, projectCount: ids.length });
+
       if (ids.length === 0) return ok(res, []);
       query = query.in('project_id', ids);
     } else if (project_id) {
@@ -53,11 +65,11 @@ export async function getFiles(req, res) {
 
     // Enrich with uploader name
     const uploaderIds = [...new Set((data || []).map(f => f.uploaded_by).filter(Boolean))];
-    let profileMap: Record<string, string> = {};
+    const profileMap = {};
     if (uploaderIds.length > 0) {
       const { data: profiles } = await supabase
         .from('profiles').select('id, name').in('id', uploaderIds);
-      profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p.name]));
+      for (const p of profiles || []) profileMap[p.id] = p.name;
     }
 
     return ok(res, (data || []).map(f => ({

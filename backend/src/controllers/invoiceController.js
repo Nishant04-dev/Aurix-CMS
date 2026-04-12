@@ -136,7 +136,7 @@ export async function getInvoices(req, res) {
     // Clients only see their own invoices
     if (role === 'client') {
       const { data: client } = await supabase
-        .from('clients').select('id').eq('user_id', userId).eq('org_id', orgId).single();
+        .from('clients').select('id').eq('user_id', userId).eq('org_id', orgId).maybeSingle();
       if (!client) return ok(res, []);
       query = query.eq('client_id', client.id);
     }

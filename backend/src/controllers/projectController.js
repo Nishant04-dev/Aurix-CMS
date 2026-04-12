@@ -118,16 +118,41 @@ export async function getProjects(req, res) {
       query = query.in('id', ids);
     }
 
-    // Client sees only their projects
+    // Client sees only their projects — two lookup paths:
+    // 1. Primary: projects where project.client_id matches their clients row
+    // 2. Fallback: projects where they are in project_members
     if (normalized === 'client') {
+      const projectIds = new Set();
+
+      // Path 1: via clients table (client_id on project)
       const { data: client } = await supabase
         .from('clients')
         .select('id')
         .eq('user_id', userId)
         .eq('org_id', orgId)
-        .single();
-      if (!client) return ok(res, []);
-      query = query.eq('client_id', client.id);
+        .maybeSingle();
+
+      if (client) {
+        const { data: clientProjects } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('client_id', client.id)
+          .eq('org_id', orgId);
+        (clientProjects || []).forEach(p => projectIds.add(p.id));
+      }
+
+      // Path 2: via project_members (explicit membership)
+      const { data: memberProjects } = await supabase
+        .from('project_members')
+        .select('project_id')
+        .eq('user_id', userId);
+      (memberProjects || []).forEach(p => projectIds.add(p.project_id));
+
+      const ids = [...projectIds];
+      logger.info('getProjects: client project lookup', { userId, orgId, clientId: client?.id, projectCount: ids.length });
+
+      if (ids.length === 0) return ok(res, []);
+      query = query.in('id', ids);
     }
 
     const { data, error } = await query;

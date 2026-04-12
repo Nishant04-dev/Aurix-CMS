@@ -30,13 +30,28 @@ export async function getTasks(req, res) {
     const normalized = normalizeRole(role);
 
     if (normalized === 'client') {
-      // Clients see tasks for their projects only
+      // Clients see tasks for their projects only.
+      // Two lookup paths — same as getProjects:
+      // 1. projects where project.client_id = their clients row
+      // 2. projects where they are in project_members
+      const projectIds = new Set();
+
       const { data: client } = await supabase
-        .from('clients').select('id').eq('user_id', userId).eq('org_id', orgId).single();
-      if (!client) return ok(res, []);
-      const { data: projects } = await supabase
-        .from('projects').select('id').eq('client_id', client.id).eq('org_id', orgId);
-      const ids = (projects || []).map(p => p.id);
+        .from('clients').select('id').eq('user_id', userId).eq('org_id', orgId).maybeSingle();
+
+      if (client) {
+        const { data: clientProjects } = await supabase
+          .from('projects').select('id').eq('client_id', client.id).eq('org_id', orgId);
+        (clientProjects || []).forEach(p => projectIds.add(p.id));
+      }
+
+      const { data: memberProjects } = await supabase
+        .from('project_members').select('project_id').eq('user_id', userId);
+      (memberProjects || []).forEach(p => projectIds.add(p.project_id));
+
+      const ids = [...projectIds];
+      logger.info('getTasks: client project lookup', { userId, orgId, clientId: client?.id, projectCount: ids.length });
+
       if (ids.length === 0) return ok(res, []);
       query = query.in('project_id', ids);
     } else if (normalized === 'member') {
