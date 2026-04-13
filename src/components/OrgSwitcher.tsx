@@ -57,13 +57,22 @@ export function OrgSwitcher() {
     if (switching) return;
     setSwitching(true);
     try {
+      // 1. Tell backend to update profile.org_id (source of truth)
       await api.post('/organizations/switch', { org_id: org.org_id });
-      // Update active org in context immediately (no full reload needed)
+
+      // 2. Update local context immediately for instant UI response
       setActiveOrg(org.org_id);
-      // Clear all org-scoped query caches so data re-fetches for the new org
-      queryClient.clear();
-      // Re-fetch profile to get correct role for the new org
+
+      // 3. Invalidate only org-scoped queries — not user_orgs (switcher list stays intact)
+      queryClient.invalidateQueries({ predicate: q => {
+        const key = q.queryKey[0];
+        // Keep user_orgs and platform queries; invalidate everything else (org data)
+        return key !== 'user_orgs' && key !== 'platform';
+      }});
+
+      // 4. Re-fetch profile so role/plan reflect the new org
       await refreshUser();
+
       toast({ title: `Switched to ${org.org_name}` });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Switch failed', description: err.message });
