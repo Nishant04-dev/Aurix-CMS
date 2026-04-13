@@ -227,51 +227,37 @@ export function requireRole(...roles) {
 
 /**
  * Require platform owner access.
- * Primary: isPlatformOwner flag set during authenticate() via is_platform_owner profile column.
- * Secondary: platform_user_roles table with 'Owner' role (for delegated platform admins).
+ * Single check only: req.user.isPlatformOwner set during authenticate().
+ * No fallbacks, no role checks, no org checks.
  */
 export async function requirePlatformOwner(req, res, next) {
-  // Fast path — already resolved during authenticate()
-  if (req.user?.isPlatformOwner) return next();
+  logger.info('PLATFORM ACCESS CHECK', {
+    userId:          req.user?.id,
+    isPlatformOwner: req.user?.isPlatformOwner,
+    role:            req.user?.role,
+    orgId:           req.user?.orgId,
+  });
 
-  // Secondary: check platform_user_roles table (delegated platform admins)
+  if (req.user?.isPlatformOwner === true) return next();
+
+  // Re-fetch from DB in case authenticate() ran on old server without the flag
   try {
-    const { data: userRole } = await supabase
-      .from('platform_user_roles')
-      .select('role_id')
-      .eq('user_id', req.user.id)
-      .maybeSingle();
-
-    if (userRole?.role_id) {
-      const { data: role } = await supabase
-        .from('platform_roles')
-        .select('name')
-        .eq('id', userRole.role_id)
-        .maybeSingle();
-
-      if (role?.name?.toLowerCase() === 'owner') {
-        req.user.isPlatformOwner = true;
-        return next();
-      }
-    }
-
-    // Tertiary: re-check is_platform_owner directly from DB (handles stale req.user)
     const { data: profile } = await supabase
       .from('profiles')
       .select('is_platform_owner')
       .eq('id', req.user.id)
-      .maybeSingle();
+      .single();
 
     if (profile?.is_platform_owner === true) {
       req.user.isPlatformOwner = true;
-      logger.info('requirePlatformOwner: granted via is_platform_owner profile flag', { userId: req.user.id });
+      logger.info('requirePlatformOwner: granted via DB re-check', { userId: req.user.id });
       return next();
     }
   } catch (err) {
-    logger.warn('requirePlatformOwner check failed', { err: err.message });
+    logger.warn('requirePlatformOwner: DB re-check failed', { err: err.message });
   }
 
-  return forbidden(res, 'Platform owner access required');
+  return forbidden(res, 'Access denied: platform owner only');
 }
 
 /**
