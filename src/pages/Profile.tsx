@@ -334,6 +334,29 @@ export default function Profile() {
         </Card>
       )}
 
+      {/* Create another org — for users already in an org */}
+      {orgId && !isPlatformOwner && (
+        <Card className="border-border/50 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-primary" /> Create Another Organization
+            </CardTitle>
+            <CardDescription>
+              You can own multiple organizations and switch between them anytime.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={() => navigate('/create-org')}
+              variant="outline"
+              className="gap-2"
+            >
+              <Building2 className="h-4 w-4" /> New Organization
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Danger Zone — Leave Organization (members only, not platform owner or sole owner) */}
       {orgId && !isPlatformOwner && (
         <>

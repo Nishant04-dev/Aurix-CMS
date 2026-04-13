@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { ChevronDown, Check, Loader2, Building2 } from 'lucide-react';
+import { ChevronDown, Check, Loader2, Building2, Plus } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +28,7 @@ export function OrgSwitcher() {
   const { orgId, refreshUser } = useAuth();
   const { settings } = useOrgSettings();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [switching, setSwitching] = useState(false);
 
@@ -99,7 +101,7 @@ export function OrgSwitcher() {
           <Check className="h-3.5 w-3.5 text-primary shrink-0" />
         </DropdownMenuItem>
 
-        {otherOrgs.length > 0 ? (
+        {otherOrgs.length > 0 && (
           <>
             <DropdownMenuSeparator />
             {otherOrgs.map(org => (
@@ -123,15 +125,22 @@ export function OrgSwitcher() {
               </DropdownMenuItem>
             ))}
           </>
-        ) : (
-          <>
-            <DropdownMenuSeparator />
-            <div className="px-3 py-4 text-center">
-              <Building2 className="h-6 w-6 mx-auto mb-1.5 text-muted-foreground/40" />
-              <p className="text-xs text-muted-foreground">No other organizations</p>
-            </div>
-          </>
         )}
+
+        {/* Create new org — always visible */}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => navigate('/create-org')}
+          className="flex items-center gap-3 cursor-pointer py-2.5 text-primary"
+        >
+          <div className="h-8 w-8 rounded-lg border-2 border-dashed border-primary/30 flex items-center justify-center shrink-0">
+            <Plus className="h-4 w-4 text-primary/60" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold">Create new organization</p>
+            <p className="text-[10px] text-muted-foreground">Add another workspace</p>
+          </div>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

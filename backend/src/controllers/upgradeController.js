@@ -30,27 +30,8 @@ export async function upgradeAccount(req, res) {
   }
 
   try {
-    // ── Guard: already has an active org ─────────────────────
-    const { data: existing } = await supabase
-      .from('memberships')
-      .select('org_id, organizations(id, name, plan)')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .not('org_id', 'is', null)
-      .limit(1)
-      .maybeSingle();
-
-    if (existing?.org_id) {
-      logger.info('Upgrade: user already has org, returning existing', { userId, orgId: existing.org_id });
-      return ok(res, {
-        org_id:   existing.org_id,
-        org_name: existing.organizations?.name ?? org_name.trim(),
-        plan:     existing.organizations?.plan ?? 'free',
-        already_upgraded: true,
-      }, 'Already upgraded');
-    }
-
     // ── Atomic provision via DB transaction ──────────────────
+    // No guard against existing orgs — users can own multiple orgs (multi-org SaaS)
     logger.info('Upgrade: calling provision_new_organization RPC', { userId });
 
     const { data: orgId, error: rpcError } = await supabase.rpc('provision_new_organization', {

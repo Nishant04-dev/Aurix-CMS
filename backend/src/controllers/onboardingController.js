@@ -17,21 +17,7 @@ export async function provisionOrganization(req, res) {
   logger.info('Onboarding: provision start', { userId, org_name: org_name.trim() });
 
   try {
-    // Guard: user must not already have an active org
-    const { data: existing } = await supabase
-      .from('memberships')
-      .select('org_id')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .not('org_id', 'is', null)
-      .limit(1)
-      .maybeSingle();
-
-    if (existing?.org_id) {
-      logger.warn('Onboarding: user already has an org', { userId, orgId: existing.org_id });
-      return badRequest(res, 'You already belong to an organization');
-    }
-
+    // No guard against existing orgs — users can own/belong to multiple orgs
     // Atomic: create org + membership + update profile in one DB transaction
     const { data: orgId, error } = await supabase.rpc('provision_new_organization', {
       p_org_name: org_name.trim(),

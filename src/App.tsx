@@ -26,6 +26,7 @@ import Settings from "@/pages/Settings";
 import Invitations from "@/pages/Invitations";
 import Quotations from "@/pages/Quotations";
 import Onboarding from "@/pages/Onboarding";
+import CreateOrg from "@/pages/CreateOrg";
 import Platform from "@/pages/Platform";
 import WaitingApproval from "@/pages/WaitingApproval";
 import Support from "@/pages/Support";
@@ -124,6 +125,7 @@ function AppRoutes() {
         <Route path="/quotations" element={<UnknownRoleGate>{canAccess(role,'quotations') ? <Quotations /> : <Navigate to="/" replace />}</UnknownRoleGate>} />
 
         <Route path="/profile" element={<Profile />} />
+        <Route path="/create-org" element={<CreateOrg />} />
         <Route path="/settings" element={canAccess(role,'settings') ? <Settings /> : <Navigate to="/" replace />} />
         <Route path="/invitations" element={<Invitations />} />
         <Route path="/support" element={<Support />} />
