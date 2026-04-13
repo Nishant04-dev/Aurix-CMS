@@ -28,7 +28,7 @@ export async function getOrganization(req, res) {
 
     const { data, error } = await supabase
       .from('organizations')
-      .select('id, name, logo_url, website, gst_number, address, phone, email, currency, timezone, plan, status, created_at, template_id, branding, terms, payment_terms, bank_details, upi_id')
+      .select('id, name, logo_url, website, gst_number, address, phone, email, currency, timezone, plan, status, is_initialized, created_at, template_id, branding, terms, payment_terms, bank_details, upi_id')
       .eq('id', orgId)
       .single();
     if (error) throw error;

@@ -82,7 +82,7 @@ function UnknownRoleGate({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const { user, orgId, orgStatus, isPlatformOwner, accountType, loading } = useAuth();
+  const { user, orgId, orgStatus, orgInitialized, isPlatformOwner, accountType, loading } = useAuth();
   const { can, isClient: isClientRole } = usePermissions();
   const role = user?.role ?? 'client';
   const normalized = normalizeRole(role);
@@ -107,6 +107,25 @@ function AppRoutes() {
 
   // Business users with an org that isn't approved yet → waiting page
   if (accountType === 'business' && orgId && !isPlatformOwner && normalized !== 'super_admin' && orgStatus !== 'approved') return <WaitingApproval />;
+
+  // Org exists but provisioning didn't complete — show retry screen
+  if (orgId && !orgInitialized && !isPlatformOwner) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4 text-center max-w-sm">
+          <Loader2 className="h-8 w-8 animate-spin text-primary/50" />
+          <p className="text-sm font-medium text-foreground">Setting up your workspace...</p>
+          <p className="text-xs text-muted-foreground">This usually takes a few seconds. Refresh if it takes longer.</p>
+          <button
+            className="text-xs text-primary underline underline-offset-2 mt-2"
+            onClick={() => window.location.reload()}
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AppLayout>

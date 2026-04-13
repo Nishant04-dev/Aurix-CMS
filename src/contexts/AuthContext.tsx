@@ -9,6 +9,7 @@ interface AuthContextType {
   orgId: string | null;
   orgStatus: string | null;
   orgPlan: string | null;
+  orgInitialized: boolean;
   isPlatformOwner: boolean;
   accountType: 'user' | 'business';
   loading: boolean;
@@ -64,6 +65,7 @@ async function fetchProfile(token: string) {
     // Fetch org details
     let orgStatus: string | null = null;
     let orgPlan: string | null = null;
+    let orgInitialized: boolean = true; // assume true unless we learn otherwise
 
     if (p.org_id) {
       try {
@@ -76,8 +78,9 @@ async function fetchProfile(token: string) {
         if (orgRes.ok) {
           const orgJson = await orgRes.json();
           if (orgJson.success && orgJson.data) {
-            orgStatus = orgJson.data.status ?? null;
-            orgPlan   = orgJson.data.plan   ?? 'free';
+            orgStatus      = orgJson.data.status         ?? null;
+            orgPlan        = orgJson.data.plan           ?? 'free';
+            orgInitialized = orgJson.data.is_initialized ?? true;
           }
         }
       } catch { /* non-fatal */ }
@@ -107,6 +110,7 @@ async function fetchProfile(token: string) {
       orgId:          p.org_id ?? null,
       orgStatus,
       orgPlan,
+      orgInitialized,
       accountType,
       isPlatformOwner: p.is_platform_owner === true,
     };
@@ -125,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const [orgStatus,       setOrgStatus]       = useState<string | null>(null);
   const [orgPlan,         setOrgPlan]         = useState<string | null>(null);
+  const [orgInitialized,  setOrgInitialized]  = useState<boolean>(true);
   const [isPlatformOwner, setIsPlatformOwner] = useState(false);
   const [accountType,     setAccountType]     = useState<'user' | 'business'>('user');
   const [loading,         setLoading]         = useState(true);
@@ -136,9 +141,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrgId(r.orgId);
     setOrgStatus(r.orgStatus);
     setOrgPlan(r.orgPlan);
+    setOrgInitialized(r.orgInitialized);
     setAccountType(r.accountType);
     setIsPlatformOwner(r.isPlatformOwner);
-    // Persist active org so it survives page refresh
     try {
       if (r.orgId) localStorage.setItem('aurix_active_org', r.orgId);
       else localStorage.removeItem('aurix_active_org');
@@ -150,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrgId(null);
     setOrgStatus(null);
     setOrgPlan(null);
+    setOrgInitialized(true);
     setAccountType('user');
     setIsPlatformOwner(false);
     try { localStorage.removeItem('aurix_active_org'); } catch { /* ignore */ }
@@ -261,7 +267,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, orgId, orgStatus, orgPlan, isPlatformOwner, accountType, loading,
+      user, orgId, orgStatus, orgPlan, orgInitialized, isPlatformOwner, accountType, loading,
       login, signup, logout, refreshUser, upgradeToBusinessAccount, setActiveOrg,
     }}>
       {children}
