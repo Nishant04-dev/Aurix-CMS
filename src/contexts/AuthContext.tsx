@@ -17,6 +17,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   upgradeToBusinessAccount: () => Promise<void>;
+  setActiveOrg: (orgId: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -118,7 +119,10 @@ async function fetchProfile(token: string) {
 // ── Provider ──────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user,            setUser]            = useState<User | null>(null);
-  const [orgId,           setOrgId]           = useState<string | null>(null);
+  const [orgId,           setOrgId]           = useState<string | null>(() => {
+    // Restore last active org from localStorage for instant UI (overridden by fetchProfile)
+    try { return localStorage.getItem('aurix_active_org') ?? null; } catch { return null; }
+  });
   const [orgStatus,       setOrgStatus]       = useState<string | null>(null);
   const [orgPlan,         setOrgPlan]         = useState<string | null>(null);
   const [isPlatformOwner, setIsPlatformOwner] = useState(false);
@@ -134,6 +138,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrgPlan(r.orgPlan);
     setAccountType(r.accountType);
     setIsPlatformOwner(r.isPlatformOwner);
+    // Persist active org so it survives page refresh
+    try {
+      if (r.orgId) localStorage.setItem('aurix_active_org', r.orgId);
+      else localStorage.removeItem('aurix_active_org');
+    } catch { /* ignore */ }
   };
 
   const clearAuth = () => {
@@ -143,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrgPlan(null);
     setAccountType('user');
     setIsPlatformOwner(false);
+    try { localStorage.removeItem('aurix_active_org'); } catch { /* ignore */ }
   };
 
   useEffect(() => {
@@ -243,10 +253,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccountType('business');
   };
 
+  // Immediately update active org in local state (called after switchOrganization API succeeds)
+  const setActiveOrg = (newOrgId: string) => {
+    setOrgId(newOrgId);
+    try { localStorage.setItem('aurix_active_org', newOrgId); } catch { /* ignore */ }
+  };
+
   return (
     <AuthContext.Provider value={{
       user, orgId, orgStatus, orgPlan, isPlatformOwner, accountType, loading,
-      login, signup, logout, refreshUser, upgradeToBusinessAccount,
+      login, signup, logout, refreshUser, upgradeToBusinessAccount, setActiveOrg,
     }}>
       {children}
     </AuthContext.Provider>

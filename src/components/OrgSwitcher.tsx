@@ -25,7 +25,7 @@ interface OrgOption {
 }
 
 export function OrgSwitcher() {
-  const { orgId, refreshUser } = useAuth();
+  const { orgId, refreshUser, setActiveOrg } = useAuth();
   const { settings } = useOrgSettings();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -58,12 +58,13 @@ export function OrgSwitcher() {
     setSwitching(true);
     try {
       await api.post('/organizations/switch', { org_id: org.org_id });
-      // Invalidate all org-related caches before refreshing
-      queryClient.removeQueries({ queryKey: ['user_orgs'] });
-      queryClient.removeQueries({ queryKey: ['org_settings'] });
+      // Update active org in context immediately (no full reload needed)
+      setActiveOrg(org.org_id);
+      // Clear all org-scoped query caches so data re-fetches for the new org
+      queryClient.clear();
+      // Re-fetch profile to get correct role for the new org
       await refreshUser();
       toast({ title: `Switched to ${org.org_name}` });
-      window.location.reload();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Switch failed', description: err.message });
     } finally {

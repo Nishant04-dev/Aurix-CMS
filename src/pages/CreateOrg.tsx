@@ -14,7 +14,7 @@ import { Loader2, Building2, ArrowRight, CheckCircle2 } from 'lucide-react';
  * Creates a new org and switches to it automatically.
  */
 export default function CreateOrg() {
-  const { refreshUser } = useAuth();
+  const { refreshUser, setActiveOrg } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -37,6 +37,7 @@ export default function CreateOrg() {
 
       // Switch to the new org immediately
       await api.post('/organizations/switch', { org_id: result.org_id });
+      setActiveOrg(result.org_id);
 
       setSuccess(true);
       toast({ title: 'Organization created', description: `Switched to ${result.org_name}.` });
