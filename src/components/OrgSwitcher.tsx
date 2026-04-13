@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { ChevronDown, Check, Loader2, Building2, Plus } from 'lucide-react';
+import { ChevronDown, Check, Loader2, Plus } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +24,15 @@ interface OrgOption {
   is_owner: boolean;
 }
 
+// All query keys that are scoped to the active org.
+// Invalidated on every org switch so data re-fetches for the new org.
+const ORG_SCOPED_KEYS = [
+  'projects', 'tasks', 'invoices', 'quotations', 'clients',
+  'files', 'messages', 'notifications', 'audit-logs', 'roles',
+  'users', 'taxes', 'templates', 'plan_limits', 'org_settings',
+  'channels', 'invitations', 'members',
+];
+
 export function OrgSwitcher() {
   const { orgId, refreshUser, setActiveOrg } = useAuth();
   const { settings } = useOrgSettings();
@@ -35,19 +44,16 @@ export function OrgSwitcher() {
   const { data: orgs = [] } = useQuery<OrgOption[]>({
     queryKey: ['user_orgs'],
     queryFn: () => api.get<OrgOption[]>('/organizations/mine'),
-    staleTime: 0,          // always fetch fresh — security critical
-    gcTime: 0,             // don't keep in cache after unmount
+    staleTime: 0,
+    gcTime: 0,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
     retry: false,
   });
 
-  // Use org settings name (already loaded) as primary, fallback to org list
   const currentOrgName = settings?.name ?? orgs.find(o => o.org_id === orgId)?.org_name;
 
-  // Don't render if no org at all
   if (!orgId && orgs.length === 0) return null;
-  // If we have orgs but orgId isn't set yet, show first org name
   const displayName = currentOrgName ?? orgs[0]?.org_name;
   if (!displayName) return null;
 
@@ -57,24 +63,29 @@ export function OrgSwitcher() {
     if (switching) return;
     setSwitching(true);
     try {
-      // 1. Tell backend to update profile.org_id (source of truth)
+      // 1. Backend is source of truth — update profile.org_id first
       await api.post('/organizations/switch', { org_id: org.org_id });
 
-      // 2. Update local context immediately for instant UI response
+      // 2. Update local context immediately (localStorage + React state)
       setActiveOrg(org.org_id);
 
-      // 3. Invalidate only org-scoped queries — not user_orgs (switcher list stays intact)
-      queryClient.invalidateQueries({ predicate: q => {
-        const key = q.queryKey[0];
-        // Keep user_orgs and platform queries; invalidate everything else (org data)
-        return key !== 'user_orgs' && key !== 'platform';
-      }});
+      // 3. Invalidate only org-scoped query keys — user_orgs list stays intact
+      ORG_SCOPED_KEYS.forEach(key =>
+        queryClient.invalidateQueries({ queryKey: [key] })
+      );
 
       // 4. Re-fetch profile so role/plan reflect the new org
       await refreshUser();
 
+      // 5. Emit global event for any downstream listeners (websockets, analytics, etc.)
+      window.dispatchEvent(new CustomEvent('aurix:org-switched', {
+        detail: { org_id: org.org_id, org_name: org.org_name },
+      }));
+
       toast({ title: `Switched to ${org.org_name}` });
     } catch (err: any) {
+      // Backend failed — do NOT update local state (already handled: setActiveOrg
+      // was called after the API succeeded, so if API throws we never reach it)
       toast({ variant: 'destructive', title: 'Switch failed', description: err.message });
     } finally {
       setSwitching(false);
@@ -83,23 +94,27 @@ export function OrgSwitcher() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button className="hidden md:flex items-center gap-1.5 text-xs font-medium text-muted-foreground border border-border/50 rounded-full px-2.5 py-1 bg-muted/30 hover:bg-accent transition-colors max-w-[200px]">
+      <DropdownMenuTrigger asChild disabled={switching}>
+        <button
+          disabled={switching}
+          className="hidden md:flex items-center gap-1.5 text-xs font-medium text-muted-foreground border border-border/50 rounded-full px-2.5 py-1 bg-muted/30 hover:bg-accent transition-colors max-w-[200px] disabled:opacity-60 disabled:cursor-not-allowed"
+        >
           {switching
             ? <Loader2 className="h-3 w-3 animate-spin shrink-0" />
             : <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
           }
-          <span className="truncate flex-1">{displayName}</span>
+          <span className="truncate flex-1">{switching ? 'Switching…' : displayName}</span>
           <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
         </button>
       </DropdownMenuTrigger>
+
       <DropdownMenuContent align="start" className="w-60">
         <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground">
           Switch Organization
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
-        {/* Current org */}
+        {/* Current org — always shown, non-interactive */}
         <DropdownMenuItem className="flex items-center gap-3 py-2.5 opacity-60 cursor-default" disabled>
           <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
             {displayName.charAt(0).toUpperCase()}
@@ -111,6 +126,7 @@ export function OrgSwitcher() {
           <Check className="h-3.5 w-3.5 text-primary shrink-0" />
         </DropdownMenuItem>
 
+        {/* Other orgs */}
         {otherOrgs.length > 0 && (
           <>
             <DropdownMenuSeparator />
@@ -118,7 +134,8 @@ export function OrgSwitcher() {
               <DropdownMenuItem
                 key={org.org_id}
                 onClick={() => handleSwitch(org)}
-                className="flex items-center gap-3 cursor-pointer py-2.5"
+                disabled={switching}
+                className="flex items-center gap-3 cursor-pointer py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground text-xs font-bold shrink-0 overflow-hidden">
                   {org.org_logo
@@ -137,11 +154,12 @@ export function OrgSwitcher() {
           </>
         )}
 
-        {/* Create new org — always visible */}
+        {/* Create new org */}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => navigate('/create-org')}
-          className="flex items-center gap-3 cursor-pointer py-2.5 text-primary"
+          disabled={switching}
+          className="flex items-center gap-3 cursor-pointer py-2.5 text-primary disabled:opacity-50"
         >
           <div className="h-8 w-8 rounded-lg border-2 border-dashed border-primary/30 flex items-center justify-center shrink-0">
             <Plus className="h-4 w-4 text-primary/60" />
