@@ -81,6 +81,29 @@ function UnknownRoleGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Shown when org exists but is_initialized=false. Polls every 3s until ready. */
+function OrgInitializingScreen() {
+  const { refreshUser, orgInitialized } = useAuth();
+
+  React.useEffect(() => {
+    if (orgInitialized) return; // already done — nothing to poll
+    const interval = setInterval(async () => {
+      await refreshUser();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [orgInitialized]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="flex h-screen w-screen items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-4 text-center max-w-sm">
+        <Loader2 className="h-8 w-8 animate-spin text-primary/50" />
+        <p className="text-sm font-medium text-foreground">Setting up your workspace...</p>
+        <p className="text-xs text-muted-foreground">This usually takes a few seconds.</p>
+      </div>
+    </div>
+  );
+}
+
 function AppRoutes() {
   const { user, orgId, orgStatus, orgInitialized, isPlatformOwner, accountType, loading } = useAuth();
   const { can, isClient: isClientRole } = usePermissions();
@@ -108,23 +131,9 @@ function AppRoutes() {
   // Business users with an org that isn't approved yet → waiting page
   if (accountType === 'business' && orgId && !isPlatformOwner && normalized !== 'super_admin' && orgStatus !== 'approved') return <WaitingApproval />;
 
-  // Org exists but provisioning didn't complete — show retry screen
+  // Org exists but provisioning didn't complete — poll until ready, then auto-redirect
   if (orgId && !orgInitialized && !isPlatformOwner) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4 text-center max-w-sm">
-          <Loader2 className="h-8 w-8 animate-spin text-primary/50" />
-          <p className="text-sm font-medium text-foreground">Setting up your workspace...</p>
-          <p className="text-xs text-muted-foreground">This usually takes a few seconds. Refresh if it takes longer.</p>
-          <button
-            className="text-xs text-primary underline underline-offset-2 mt-2"
-            onClick={() => window.location.reload()}
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
-    );
+    return <OrgInitializingScreen />;
   }
 
   return (
