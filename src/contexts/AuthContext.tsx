@@ -86,6 +86,8 @@ async function fetchProfile(token: string) {
       } catch { /* non-fatal */ }
     }
 
+    console.log('[auth] ORG STATE', { orgId: p.org_id, orgInitialized, orgStatus, orgPlan });
+
     // Platform owner always gets approved status
     if (p.is_platform_owner) {
       orgStatus = orgStatus ?? 'approved';
@@ -227,6 +229,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = async (email: string, password: string) => {
+    // Clear stale active org on login — backend will provide the correct one
+    try { localStorage.removeItem('aurix_active_org'); } catch { /* ignore */ }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { success: false, error: error.message };
     return { success: true };

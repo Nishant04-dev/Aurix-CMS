@@ -81,17 +81,42 @@ function UnknownRoleGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/** Shown when org exists but is_initialized=false. Polls every 3s until ready. */
+/** Shown when org exists but is_initialized=false. Polls every 2s, times out after 15s. */
 function OrgInitializingScreen() {
   const { refreshUser, orgInitialized } = useAuth();
+  const [timedOut, setTimedOut] = React.useState(false);
 
   React.useEffect(() => {
-    if (orgInitialized) return; // already done — nothing to poll
-    const interval = setInterval(async () => {
-      await refreshUser();
-    }, 3000);
-    return () => clearInterval(interval);
+    if (orgInitialized) return;
+
+    // Poll every 2 seconds
+    const interval = setInterval(() => { refreshUser(); }, 2000);
+
+    // Give up after 15 seconds — show error instead of infinite spinner
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+      setTimedOut(true);
+    }, 15000);
+
+    return () => { clearInterval(interval); clearTimeout(timeout); };
   }, [orgInitialized]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (timedOut) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4 text-center max-w-sm">
+          <p className="text-sm font-medium text-foreground">Workspace setup is taking longer than expected.</p>
+          <p className="text-xs text-muted-foreground">Please refresh the page. If this persists, contact support.</p>
+          <button
+            className="text-xs text-primary underline underline-offset-2"
+            onClick={() => window.location.reload()}
+          >
+            Refresh now
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-background">
