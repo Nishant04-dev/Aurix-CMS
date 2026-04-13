@@ -30,7 +30,6 @@ export default function Profile() {
   const { user, accountType, upgradeToBusinessAccount, logout, orgId, refreshUser, isPlatformOwner } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [upgradingBusiness, setUpgradingBusiness] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const leaveOrg = useLeaveOrganization();
 
@@ -142,17 +141,11 @@ export default function Profile() {
       : (ROLE_LABELS[user.role] ?? ROLE_LABELS.client);
   const initials = (user.name || user.email || '?').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
-  const handleUpgradeToBusiness = async () => {
-    setUpgradingBusiness(true);
-    try {
-      await upgradeToBusinessAccount();
-      navigate('/onboarding');
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Upgrade failed', description: err.message });
-      setUpgradingBusiness(false); // restore button
-    }
-    // Note: setUpgradingBusiness(false) is intentionally NOT called on success
-    // because we navigate away — avoids a flash of the button re-appearing
+  const handleUpgradeToBusiness = () => {
+    // Just flip local accountType → App.tsx routes to Onboarding
+    // Org creation happens atomically in Onboarding via POST /api/upgrade
+    upgradeToBusinessAccount();
+    navigate('/onboarding');
   };
 
   return (
@@ -332,14 +325,10 @@ export default function Profile() {
           <CardContent>
             <Button
               onClick={handleUpgradeToBusiness}
-              disabled={upgradingBusiness}
               variant="outline"
               className="border-primary/30 text-primary hover:bg-primary/5 gap-2"
             >
-              {upgradingBusiness
-                ? <><Loader2 className="h-4 w-4 animate-spin" />Upgrading...</>
-                : <><Building2 className="h-4 w-4" />Get Started <ArrowRight className="h-4 w-4" /></>
-              }
+              <Building2 className="h-4 w-4" />Get Started <ArrowRight className="h-4 w-4" />
             </Button>
           </CardContent>
         </Card>

@@ -24,6 +24,7 @@ import { setOrgStatus }                                              from '../co
 import { getPlanLimits, getPlans }                                   from '../controllers/planController.js';
 import { getNotifications, markNotificationRead, markAllRead }       from '../controllers/notificationController.js';
 import { provisionOrganization }                                     from '../controllers/onboardingController.js';
+import { upgradeAccount }                                            from '../controllers/upgradeController.js';
 import { changeUserRole }                                            from '../controllers/userController.js';
 import { recoverPlatformOwnerAccess, getPlatformOwnerStatus }       from '../controllers/recoveryController.js';
 import {
@@ -158,6 +159,9 @@ router.post('/platform/org-status', requirePlatformOwner, writeLimiter, setOrgSt
 
 // ── Onboarding ────────────────────────────────────────────────
 router.post('/onboarding/provision', writeLimiter, provisionOrganization);
+
+// ── Upgrade (single atomic endpoint — preferred over /onboarding/provision) ──
+router.post('/upgrade', writeLimiter, upgradeAccount);
 
 // ── Platform owner recovery ───────────────────────────────────
 router.get ('/recovery/status',  requirePlatformOwner, getPlatformOwnerStatus);

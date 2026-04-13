@@ -237,21 +237,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const upgradeToBusinessAccount = async () => {
     if (!user) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) throw new Error('No active session');
-
-    const res = await fetch(`${API_BASE}/api/profile`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ account_type: 'business' }),
-    });
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error || 'Failed to upgrade account');
-    }
-
-    // Only update state AFTER confirmed server success
+    // Just flip accountType locally so App.tsx routes to Onboarding.
+    // The actual org creation + profile update happens atomically in POST /api/upgrade
+    // called from the Onboarding page. We do NOT touch the backend here.
     setAccountType('business');
   };
 

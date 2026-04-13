@@ -58,13 +58,14 @@ export default function Onboarding() {
     setError('');
 
     try {
-      await api.post('/onboarding/provision', { org_name: orgName.trim() });
+      // Single atomic call — creates org, membership, subscription, updates profile
+      await api.post('/upgrade', { org_name: orgName.trim() });
 
       // Only show success AFTER confirmed server response
       setSuccess(true);
       toast({ title: 'Workspace created!', description: `Welcome to ${orgName}.` });
 
-      // Refresh auth context to pick up new org_id from backend
+      // Refresh auth context to pick up new org_id, role, accountType from backend
       setTimeout(async () => {
         await refreshUser();
       }, 1200);
