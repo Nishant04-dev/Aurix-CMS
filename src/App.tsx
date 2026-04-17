@@ -51,6 +51,11 @@ const queryClient = new QueryClient({
   },
 });
 
+// Make queryClient globally accessible for AuthContext
+if (typeof window !== 'undefined') {
+  (window as any).queryClient = queryClient;
+}
+
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const n = normalizeRole(user?.role);

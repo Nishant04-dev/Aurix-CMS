@@ -32,43 +32,12 @@ export async function authenticate(req, res, next) {
     }
 
     // ── PLATFORM OWNER ────────────────────────────────────────
+    // SIMPLIFIED: Platform owner status is PERMANENT and UNCONDITIONAL
     if (profile.is_platform_owner) {
-      // Source of truth: memberships table.
-      // Priority order:
-      //   1. Active membership in profile.org_id — but ONLY if that org is approved/pending
-      //      AND the membership role is super_admin/admin (not a stale low-power membership)
-      //   2. Active super_admin membership in any approved org (most recently updated)
-      //   3. Any active membership in an approved org
-      //   4. Owned org as last resort (auto-create membership)
-      let orgId = null;
+      // ALWAYS trust profile.org_id for platform owner
+      let orgId = profile.org_id;
 
-      // Fetch all active memberships with org status in one query
-      const { data: allMems } = await supabase
-        .from('memberships')
-        .select('id, org_id, role, updated_at, organizations!inner(id, status)')
-        .eq('user_id', profile.id)
-        .eq('status', 'active')
-        .in('organizations.status', ['approved', 'pending'])
-        .order('updated_at', { ascending: false });
-
-      if (allMems?.length) {
-        const withPower = allMems.map(m => ({ ...m, power: ROLE_POWER[m.role?.toLowerCase()] ?? 10 }));
-
-        // Prefer profile.org_id if it has a high-power role (admin+)
-        const preferred = profile.org_id
-          ? withPower.find(m => m.org_id === profile.org_id && m.power >= 90)
-          : null;
-
-        if (preferred) {
-          orgId = preferred.org_id;
-        } else {
-          // Pick highest-power membership, tie-break by most recently updated
-          withPower.sort((a, b) => b.power - a.power || new Date(b.updated_at) - new Date(a.updated_at));
-          orgId = withPower[0].org_id;
-        }
-      }
-
-      // Last resort: owned org (and ensure membership exists)
+      // Only fall back if profile.org_id is null
       if (!orgId) {
         const { data: ownedOrg } = await supabase
           .from('organizations')
@@ -78,29 +47,20 @@ export async function authenticate(req, res, next) {
           .order('created_at', { ascending: true })
           .limit(1)
           .maybeSingle();
+        
         if (ownedOrg) {
           orgId = ownedOrg.id;
+          // Ensure membership exists
           await supabase.from('memberships')
-            .upsert({ user_id: profile.id, org_id: orgId, role: 'super_admin', status: 'active' }, { onConflict: 'user_id,org_id' });
-          logger.info('Platform owner org_id restored via owned org', { userId: profile.id, orgId });
+            .upsert({ user_id: profile.id, org_id: orgId, role: 'super_admin', status: 'active' }, 
+                    { onConflict: 'user_id,org_id' });
+          // Sync profile.org_id
+          await supabase.from('profiles').update({ org_id: orgId }).eq('id', profile.id);
+          logger.info('Platform owner org_id restored', { userId: profile.id, orgId });
         }
       }
 
-      // Sync profile.org_id if it's stale
-      if (orgId && orgId !== profile.org_id) {
-        supabase.from('profiles').update({ org_id: orgId }).eq('id', profile.id)
-          .then(({ error }) => {
-            if (error) logger.warn('Auth: failed to sync platform owner profile.org_id', { err: error.message });
-            else logger.info('Auth: platform owner profile.org_id synced', { userId: profile.id, orgId });
-          });
-      }
-
-      logger.debug('Auth: platform owner org resolved', {
-        userId: profile.id,
-        resolvedOrgId: orgId,
-        profileOrgId: profile.org_id,
-      });
-
+      // Platform owner ALWAYS has super_admin role, regardless of org
       req.user = {
         id:                 profile.id,
         email:              profile.email || user.email,
@@ -119,18 +79,19 @@ export async function authenticate(req, res, next) {
     }
 
     // ── REGULAR USER ──────────────────────────────────────────
-    // memberships is the SOLE source of truth for role + org.
-    // profile.org_id is only used as a hint to prefer a specific org.
+    // memberships.role is the SOLE source of truth
+    // profile.org_id is used as a hint to prefer a specific org
     let resolvedOrgId  = null;
     let resolvedRole   = 'client';
     let resolvedPower  = 10;
     let membershipId   = null;
+    let resolvedRoleId = null;
 
-    // 1. Try to find an active membership matching profile.org_id (preferred org)
+    // 1. Try to find active membership matching profile.org_id (preferred org)
     if (profile.org_id) {
       const { data: preferred, error: prefErr } = await supabase
         .from('memberships')
-        .select('id, org_id, role')
+        .select('id, org_id, role, role_id')
         .eq('user_id', profile.id)
         .eq('org_id', profile.org_id)
         .eq('status', 'active')
@@ -139,10 +100,11 @@ export async function authenticate(req, res, next) {
       if (prefErr) {
         logger.warn('Auth: preferred membership query failed', { err: prefErr.message, userId: profile.id });
       } else if (preferred) {
-        resolvedOrgId = preferred.org_id;
-        membershipId  = preferred.id;
-        resolvedRole  = preferred.role || 'client';
-        resolvedPower = ROLE_POWER[resolvedRole?.toLowerCase()] ?? 10;
+        resolvedOrgId  = preferred.org_id;
+        membershipId   = preferred.id;
+        resolvedRole   = preferred.role || 'client';
+        resolvedRoleId = preferred.role_id;
+        resolvedPower  = ROLE_POWER[resolvedRole?.toLowerCase()] ?? 10;
         logger.debug('Auth: org resolved from preferred membership', {
           userId: profile.id, org: preferred.org_id, role: resolvedRole,
         });
@@ -153,7 +115,7 @@ export async function authenticate(req, res, next) {
     if (!resolvedOrgId) {
       const { data: fallback, error: fallbackErr } = await supabase
         .from('memberships')
-        .select('id, org_id, role')
+        .select('id, org_id, role, role_id')
         .eq('user_id', profile.id)
         .eq('status', 'active')
         .order('updated_at', { ascending: false })
@@ -163,14 +125,15 @@ export async function authenticate(req, res, next) {
       if (fallbackErr) {
         logger.warn('Auth: fallback membership query failed', { err: fallbackErr.message, userId: profile.id });
       } else if (fallback) {
-        resolvedOrgId = fallback.org_id;
-        membershipId  = fallback.id;
-        resolvedRole  = fallback.role || 'client';
-        resolvedPower = ROLE_POWER[resolvedRole?.toLowerCase()] ?? 10;
+        resolvedOrgId  = fallback.org_id;
+        membershipId   = fallback.id;
+        resolvedRole   = fallback.role || 'client';
+        resolvedRoleId = fallback.role_id;
+        resolvedPower  = ROLE_POWER[resolvedRole?.toLowerCase()] ?? 10;
         logger.info('Auth: org resolved from fallback membership', {
           userId: profile.id, org: fallback.org_id, role: resolvedRole,
         });
-        // Sync profile.org_id (best-effort, non-blocking) — trigger will fix role too
+        // Sync profile.org_id (best-effort, non-blocking)
         supabase.from('profiles').update({ org_id: fallback.org_id }).eq('id', profile.id)
           .then(({ error }) => {
             if (error) logger.warn('Auth: failed to sync profile.org_id', { err: error.message });
@@ -180,12 +143,13 @@ export async function authenticate(req, res, next) {
       }
     }
 
+    // CRITICAL: req.user.role MUST come from memberships, NOT profiles
     req.user = {
       id:                 profile.id,
       email:              profile.email || user.email,
       name:               profile.name,
-      role:               resolvedRole,
-      roleId:             profile.role_id || null,
+      role:               resolvedRole,        // ✅ From memberships ONLY
+      roleId:             resolvedRoleId,      // ✅ From memberships ONLY
       orgId:              resolvedOrgId,
       powerLevel:         resolvedPower,
       isPlatformOwner:    false,

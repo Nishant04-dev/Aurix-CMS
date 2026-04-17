@@ -71,7 +71,7 @@ app.get('/api/ping', (_req, res) => {
   res.json({
     success: true,
     message: 'Aurix backend is running',
-    version: '2.0.0',
+    version: '2.1.0-stabilization', // Updated after system stabilization fixes
     routes: [
       'GET /api/profile',
       'GET /api/organizations',

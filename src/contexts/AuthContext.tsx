@@ -267,6 +267,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setActiveOrg = (newOrgId: string) => {
     setOrgId(newOrgId);
     try { localStorage.setItem('aurix_active_org', newOrgId); } catch { /* ignore */ }
+    
+    // CRITICAL: Invalidate all org-scoped queries to prevent stale data
+    // This forces React Query to refetch with the new org context
+    if (typeof window !== 'undefined' && (window as any).queryClient) {
+      const queryClient = (window as any).queryClient;
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['roles'] });
+      queryClient.invalidateQueries({ queryKey: ['organization'] });
+      logger.info('[auth] Invalidated org-scoped queries after org switch', { newOrgId });
+    }
   };
 
   return (
