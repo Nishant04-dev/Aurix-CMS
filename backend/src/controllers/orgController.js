@@ -1,5 +1,5 @@
 import { supabase } from '../config/supabase.js';
-import { ok, badRequest, forbidden, serverError } from '../utils/response.js';
+import { ok, badRequest, serverError } from '../utils/response.js';
 import { sendOrgRejectedEmail, sendOrgBannedEmail, sendOrgSuspendedEmail } from '../services/mailService.js';
 import { logger } from '../utils/logger.js';
 

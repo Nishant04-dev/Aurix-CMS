@@ -11,12 +11,22 @@ node_modules
 dist
 dist-ssr
 *.local
+*.tar.gz
 
 # Environment files — never commit secrets
 .env
 .env.*
 !.env.example
 !.env.production.example
+
+# Backend environment
+backend/.env
+backend/logs/
+backend/node_modules/
+backend/src.zip
+
+# Utility scripts with credentials
+register-users.mjs
 
 # Editor directories and files
 .vscode/*
@@ -28,8 +38,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-# Backend node_modules only — source code IS tracked
-backend/node_modules/
-backend/logs/
-backend/src.zip

@@ -263,7 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccountType('business');
   };
 
-  // Immediately update active org in local state (called after switchOrganization API succeeds)
+  // BUG-004 FIX: Immediately update active org in local state (called after switchOrganization API succeeds)
   const setActiveOrg = (newOrgId: string) => {
     setOrgId(newOrgId);
     try { localStorage.setItem('aurix_active_org', newOrgId); } catch { /* ignore */ }
@@ -279,7 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       queryClient.invalidateQueries({ queryKey: ['roles'] });
       queryClient.invalidateQueries({ queryKey: ['organization'] });
-      logger.info('[auth] Invalidated org-scoped queries after org switch', { newOrgId });
+      console.log('[auth] Invalidated org-scoped queries after org switch', { newOrgId });
     }
   };
 

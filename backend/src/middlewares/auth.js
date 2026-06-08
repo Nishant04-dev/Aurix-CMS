@@ -169,12 +169,25 @@ export async function authenticate(req, res, next) {
 /**
  * Require active org membership.
  * Since authenticate already verified membership, this is a fast guard.
+ * BUG-014 FIX: Also validate org status
  */
-export function requireOrg(req, res, next) {
+export async function requireOrg(req, res, next) {
   if (req.user?.isPlatformOwner) return next();
   if (!req.user?.orgId) {
     return forbidden(res, 'You must belong to an organization to perform this action');
   }
+  
+  // BUG-014 FIX: Validate org status
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('status')
+    .eq('id', req.user.orgId)
+    .maybeSingle();
+  
+  if (!org || !['approved', 'pending'].includes(org.status)) {
+    return forbidden(res, 'Your organization is not active');
+  }
+  
   next();
 }
 

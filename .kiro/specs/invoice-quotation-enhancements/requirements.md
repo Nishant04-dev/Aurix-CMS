@@ -15,7 +15,7 @@ This feature enhances the Aurix CMS invoice and quotation system with production
 - **Payment Information Section**: A new section in DocumentRenderer showing bank details and UPI ID.
 - **Payment Terms Section**: A new section in DocumentRenderer showing payment schedule/conditions.
 - **Terms & Conditions Section**: A new section in DocumentRenderer showing legal terms.
-- **Aurix Footer**: The mandatory hardcoded branding footer: "Powered by Aurix Development https://aurixdevelopment.in".
+- **Aurix Footer**: The mandatory hardcoded branding footer: "Powered by Aurix Development".
 - **Settings Page**: The `src/pages/Settings.tsx` page where organization admins configure workspace settings.
 - **OrgSettingsForm**: The form component within Settings.tsx that handles organization data.
 - **Backend API**: The Express.js backend at `backend/src/`.
@@ -160,7 +160,7 @@ This feature enhances the Aurix CMS invoice and quotation system with production
 
 #### Acceptance Criteria
 
-1. THE DocumentRenderer SHALL render the text "Powered by Aurix Development https://aurixdevelopment.in" as a footer at the bottom of every document.
+1. THE DocumentRenderer SHALL render the text "Powered by Aurix Development" as a footer at the bottom of every document.
 2. THE DocumentRenderer SHALL render the Aurix footer in both the UI preview and the PDF export.
 3. THE DocumentRenderer SHALL render the Aurix footer regardless of the organization's settings, template selection, or branding configuration.
 4. THE DocumentRenderer SHALL NOT provide any mechanism (prop, setting, or toggle) to hide or remove the Aurix footer.

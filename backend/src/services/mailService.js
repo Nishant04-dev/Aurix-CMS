@@ -93,7 +93,7 @@ export async function sendOrgBannedEmail(toEmail, orgName) {
         <p>Hello,</p>
         <p>Your organization <strong>${orgName}</strong> has been removed from Aurix.</p>
         <p>All associated data has been permanently deleted.</p>
-        <p>You may apply again if needed via <a href="${APP_URL}">aurixcloud.in</a>.</p>
+        <p>You may apply again if needed via <a href="${APP_URL}">Aurix</a>.</p>
         <br/>
         <p>— Aurix Team</p>
       </div>

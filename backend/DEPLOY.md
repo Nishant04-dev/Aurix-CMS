@@ -1,8 +1,8 @@
-# Backend HTTPS Setup — Run these commands on your server (65.2.78.201)
+# Backend HTTPS Setup — Run these commands on your server
 
 ## Step 1 — Point DNS
 In your domain registrar / Cloudflare:
-Add A record:  api.aurixcloud.in → 65.2.78.201
+Add A record:  api.your-domain.com → YOUR_SERVER_IP
 
 Wait 1-2 minutes for DNS to propagate.
 
@@ -22,13 +22,13 @@ sudo systemctl reload nginx
 
 ## Step 4 — Get SSL certificate (free, auto-renews)
 ```bash
-sudo certbot --nginx -d api.aurixcloud.in
+sudo certbot --nginx -d api.your-domain.com
 ```
 Follow the prompts. Certbot will auto-fill the SSL paths in nginx.conf.
 
 ## Step 5 — Verify
 ```bash
-curl https://api.aurixcloud.in/health
+curl https://api.your-domain.com/health
 # Should return: {"status":"ok",...}
 ```
 
@@ -37,6 +37,6 @@ On your local machine:
 ```bash
 npm run build
 ```
-Then deploy the dist/ folder to app.aurixcloud.in.
+Then deploy the dist/ folder to your frontend host.
 
-That's it. The frontend will now call https://api.aurixcloud.in instead of http://65.2.78.201:25569.
+That's it. The frontend will now call https://api.your-domain.com instead of http://YOUR_SERVER_IP:25569.

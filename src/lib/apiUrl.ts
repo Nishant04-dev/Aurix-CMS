@@ -6,7 +6,7 @@
  * 2. VITE_API_URL — baked in at build time via .env.production
  * 3. window.location.origin — same-origin fallback (only works if backend is on same host)
  *
- * IMPORTANT: app.aurixcloud.in is HTTPS. The backend must also be HTTPS (or same origin)
+ * IMPORTANT: The frontend domain must be HTTPS. The backend must also be HTTPS (or same origin)
  * to avoid mixed-content blocks. Use a reverse proxy (nginx) with SSL for production.
  */
 export const API_BASE: string =

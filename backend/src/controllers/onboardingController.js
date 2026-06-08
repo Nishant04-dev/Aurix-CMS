@@ -1,7 +1,14 @@
+import { z } from 'zod';
 import { supabase } from '../config/supabase.js';
 import { ok, badRequest, serverError } from '../utils/response.js';
 import { logger } from '../utils/logger.js';
 import { logAudit } from '../utils/auditLogger.js';
+
+// BUG-011 FIX: Add validation schema for org name
+const OrgNameSchema = z.string()
+  .min(2, 'Organization name must be at least 2 characters')
+  .max(100, 'Organization name must be less than 100 characters')
+  .regex(/^[a-zA-Z0-9\s\-_&.]+$/, 'Organization name contains invalid characters');
 
 /**
  * Atomically provision a new organization for the current user.
@@ -13,6 +20,15 @@ export async function provisionOrganization(req, res) {
   const { org_name } = req.body;
 
   if (!org_name?.trim()) return badRequest(res, 'org_name is required');
+
+  // BUG-011 FIX: Validate org name
+  try {
+    OrgNameSchema.parse(org_name.trim());
+  } catch (err) {
+    if (err.name === 'ZodError') {
+      return badRequest(res, err.errors[0].message);
+    }
+  }
 
   logger.info('Onboarding: provision start', { userId, org_name: org_name.trim() });
 
